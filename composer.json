@@ -1,0 +1,28 @@
+{
+    "name": "ihumbak/woo-bulk-edit",
+    "description": "WooCommerce Bulk Edit plugin with preview & commit UX, SQL-like filtering, and audit log.",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=8.1"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.0",
+        "wp-phpunit/wp-phpunit": "^6.4",
+        "yoast/phpunit-polyfills": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "IhumbakWooBulkEdit\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "IhumbakWooBulkEdit\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "sort-packages": true
+    }
+}
