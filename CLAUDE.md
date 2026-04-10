@@ -7,6 +7,39 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 **Working name:** `ihumbak-woo-bulk-edit`
 **Repo:** `git@github.com:michalstaniecko/ihumbak-woo-bulk-edit.git`
 **Spec:** `docs/specyfikacja-bulk-edit-woocommerce.md`
+**Version:** 0.1.0 (Backend MVP)
+
+## Implementation Status
+
+**Overall progress: ~25% — Backend core infrastructure complete, no frontend yet.**
+
+### Done (Backend MVP)
+- Plugin bootstrap with HPOS compatibility declaration
+- Custom DI Container (PSR-11 style, factory pattern)
+- Admin: Menu (WooCommerce submenu), AssetsLoader, ScreenController (React mount point)
+- REST API:
+  - `GET /fields` — fully working, returns all registered fields with metadata
+  - `POST /products/query` — fully working, filters/sorts/paginates via native SQL
+  - `PUT /products/batch` — registered, stub (awaits BatchSaver, Issue #12)
+  - `DELETE /products/batch` — registered, stub (awaits BulkDelete, Issue #23)
+- Field system: FieldInterface, AbstractField, FieldType enum (11 types), FieldRegistry
+- 6 core fields: name, sku, regular_price, sale_price, stock_quantity, status
+- Query system: QueryBuilder (native SQL with dynamic LEFT JOINs), FilterParser, OperatorRegistry
+- 6 operators: `=`, `!=`, `LIKE`, `NOT LIKE`, `IS EMPTY`, `IS NOT EMPTY`
+- Security: CapabilityChecker (read/write/delete/manage), RateLimiter (transient-based, 10 req/60s/user)
+- uninstall.php (drops tables, deletes options and transients)
+
+### Not Yet Implemented
+- Frontend React/TypeScript app (no package.json yet, empty asset directories)
+- Persistence layer: BatchSaver, ProductSaver, ChangeLog
+- Database migrations (table creation on activation) — Issue #25
+- Operations: SetValue, SearchReplace, MathOperation
+- Filters CRUD endpoints (`GET|POST|PUT|DELETE /filters`)
+- Export/Import endpoints
+- Bulk operation endpoint (`POST /products/bulk-operation`)
+- Integration modules (WPML, Yoast, ACF, etc.)
+- Tests (directory structure exists, no test files)
+- GPL v2+ license headers in source files
 
 ## Target Environment
 
@@ -24,7 +57,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - Custom SQL via `$wpdb->prepare()` (NOT `WP_Query` for main product filtering — performance)
 - DI container, PSR-4 autoloading via Composer
 
-### Frontend
+### Frontend (planned)
 - React 18 + TypeScript
 - Zustand for local state (changes, undo/redo)
 - React Query (TanStack Query) for server state
@@ -32,46 +65,84 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - Build: `@wordpress/scripts` or Vite with `@kucrut/vite-for-wp`
 - Validation: Zod
 
+## Architectural Decisions
+
+- **Custom DI container** — lightweight, no external library; factory-based registration in `Container.php`
+- **Native SQL over WP_Query** — `QueryBuilder` builds raw SQL for performance on large product sets
+- **Dynamic LEFT JOINs** — meta tables joined only when meta fields appear in filters/sort; reduces query cost
+- **Operator registry pattern** — each SQL operator is a class implementing `OperatorInterface`; extensible via `OperatorRegistry`
+- **FieldType as PHP enum** — 11 types (Text, Textarea, Number, Price, Integer, Select, Boolean, Date, Taxonomy, Image, Gallery, CustomMeta)
+- **Rate limiting via WP transients** — simple, no external storage dependency
+- **REST permission model** — relies on `permission_callback` with `wp_rest` nonce (standard WP REST approach)
+
 ## Directory Structure
 
 ```
 ihumbak-woo-bulk-edit/
 ├── ihumbak-woo-bulk-edit.php     # Bootstrap, plugin header, autoload
-├── uninstall.php
+├── uninstall.php                 # Cleanup on uninstall
 ├── composer.json
-├── package.json
-├── languages/
 ├── src/                          # PHP (PSR-4: IhumbakWooBulkEdit\)
-│   ├── Plugin.php
-│   ├── Container.php
-│   ├── Admin/                    # Menu, AssetsLoader, ScreenController
-│   ├── Api/                      # REST controllers
-│   ├── Query/                    # QueryBuilder, FilterParser, Operators/
-│   ├── Fields/                   # FieldRegistry, FieldInterface, Core/, Custom/
-│   ├── Operations/               # SetValue, SearchReplace, MathOperation, etc.
-│   ├── Persistence/              # ProductSaver, BatchSaver, ChangeLog
-│   ├── Integrations/             # IntegrationInterface, WPML/, Yoast/, ACF/
-│   ├── Security/                 # CapabilityChecker, NonceVerifier
-│   └── Support/                  # Logger, Cache
+│   ├── Plugin.php                # Main singleton, registers services & hooks
+│   ├── Container.php             # DI container with factory pattern
+│   ├── Admin/
+│   │   ├── Menu.php              # WooCommerce submenu registration
+│   │   ├── AssetsLoader.php      # Enqueues JS/CSS, passes REST config
+│   │   └── ScreenController.php  # Renders React mount point div
+│   ├── Api/
+│   │   ├── RestController.php    # Abstract base (namespace, helpers)
+│   │   ├── FieldsController.php  # GET /fields endpoint
+│   │   └── ProductsController.php # query/batch/delete endpoints
+│   ├── Query/
+│   │   ├── QueryBuilder.php      # Native SQL builder with dynamic JOINs
+│   │   ├── FilterParser.php      # Parses filter JSON, validates fields/operators
+│   │   └── Operators/
+│   │       ├── OperatorInterface.php
+│   │       ├── OperatorRegistry.php
+│   │       ├── EqualOperator.php
+│   │       ├── NotEqualOperator.php
+│   │       ├── LikeOperator.php
+│   │       ├── NotLikeOperator.php
+│   │       ├── IsEmptyOperator.php
+│   │       └── IsNotEmptyOperator.php
+│   ├── Fields/
+│   │   ├── FieldInterface.php    # Contract: key, label, type, sanitize, validate
+│   │   ├── AbstractField.php     # Base implementation with defaults
+│   │   ├── FieldType.php         # Enum with 11 field types
+│   │   ├── FieldRegistry.php     # Central registry, filter by capability
+│   │   └── Core/
+│   │       ├── NameField.php
+│   │       ├── SkuField.php
+│   │       ├── RegularPriceField.php
+│   │       ├── SalePriceField.php
+│   │       ├── StockQuantityField.php
+│   │       └── StatusField.php
+│   ├── Operations/               # (empty — planned)
+│   ├── Persistence/              # (empty — planned)
+│   ├── Integrations/             # (empty — planned)
+│   ├── Security/
+│   │   ├── CapabilityChecker.php # read/write/delete/manage checks
+│   │   └── RateLimiter.php       # Transient-based rate limiting
+│   └── Support/                  # (empty — planned)
 ├── assets/
-│   ├── js/                       # React app (app.tsx entry)
-│   │   ├── components/
-│   │   ├── hooks/
-│   │   ├── store/                # Zustand stores
-│   │   ├── api/                  # REST client
-│   │   └── types/
-│   ├── css/
-│   └── build/                    # Compiled output
-└── tests/
-    ├── Unit/
-    ├── Integration/
-    └── e2e/                      # Playwright
+│   ├── js/                       # (empty — planned React app)
+│   ├── css/                      # (empty — planned)
+│   └── build/                    # Compiled output (app.js, app.css, app.asset.php)
+├── tests/
+│   ├── Unit/                     # (empty — planned)
+│   ├── Integration/              # (empty — planned)
+│   └── e2e/                      # (empty — Playwright planned)
+├── docs/
+│   └── specyfikacja-bulk-edit-woocommerce.md
+└── languages/
 ```
 
 ## Custom Database Tables
 
 - `{prefix}_wbm_saved_filters` — user saved filters (JSON)
 - `{prefix}_wbm_change_log` — audit log (product_id, field, old_value, new_value)
+
+Note: Tables defined in uninstall.php cleanup but migration/creation not yet implemented (Issue #25).
 
 ## Coding Conventions
 
@@ -95,14 +166,21 @@ ihumbak-woo-bulk-edit/
 ### REST API Namespace
 `ihumbak-woo-bulk-edit/v1`
 
-Key endpoints:
-- `GET /fields` — available fields with metadata
-- `POST /products/query` — filter + sort + pagination
-- `PUT /products/batch` — save changes batch
-- `POST /products/bulk-operation` — execute bulk operation
-- `DELETE /products/batch` — bulk delete
-- `GET|POST|PUT|DELETE /filters` — saved filters CRUD
-- `POST /export`, `POST /import`, `GET /import/status/{id}`
+Endpoints and status:
+
+| Method | Endpoint | Status |
+|--------|----------|--------|
+| `GET` | `/fields` | Implemented |
+| `POST` | `/products/query` | Implemented |
+| `PUT` | `/products/batch` | Stub (Issue #12) |
+| `DELETE` | `/products/batch` | Stub (Issue #23) |
+| `POST` | `/products/bulk-operation` | Planned |
+| `GET\|POST\|PUT\|DELETE` | `/filters` | Planned |
+| `POST` | `/export` | Planned |
+| `POST` | `/import` | Planned |
+| `GET` | `/import/status/{id}` | Planned |
+
+Query endpoint accepts: `filters` (array of `{field, operator, value}`), `sort` (`{field, order}`), `page` (min 1), `per_page` (10-500).
 
 Error format: `{ "code": "wbm_*", "message": "...", "data": { "status": 4xx, ... } }`
 
@@ -134,7 +212,7 @@ Error format: `{ "code": "wbm_*", "message": "...", "data": { "status": 4xx, ...
 
 ```bash
 composer install          # PHP dependencies
-npm install               # JS dependencies
+npm install               # JS dependencies (not yet configured)
 npm run start             # Dev server with HMR
 npm run build             # Production build
 composer test             # PHPUnit
@@ -157,3 +235,9 @@ Priority order:
 4. WooCommerce Brands
 5. WooCommerce Subscriptions
 6. Wholesale plugins
+
+## Known TODOs (from code)
+
+- **Issue #12** — Implement `BatchSaver` for `PUT /products/batch`
+- **Issue #23** — Implement `BulkDelete` for `DELETE /products/batch`
+- **Issue #25** — `DatabaseMigrator` for table creation on plugin activation
