@@ -11,7 +11,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 
 ## Implementation Status
 
-**Overall progress: ~25% — Backend core infrastructure complete, no frontend yet.**
+**Overall progress: ~35% — Backend MVP complete, frontend foundation in place (build pipeline, API client, hooks).**
 
 ### Done (Backend MVP)
 - Plugin bootstrap with HPOS compatibility declaration
@@ -29,8 +29,18 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - Security: CapabilityChecker (read/write/delete/manage), RateLimiter (transient-based, 10 req/60s/user)
 - uninstall.php (drops tables, deletes options and transients)
 
+### Done (Frontend Foundation)
+- Build pipeline: `@wordpress/scripts` (webpack), TypeScript strict mode, `@/*` path aliases
+- React 18 app skeleton with `QueryClientProvider` (`assets/js/app.tsx`)
+- REST API client: typed `apiFetch` wrapper with `ApiError` class (`assets/js/api/client.ts`)
+- Endpoint functions: `fetchProducts`, `fetchFields` (`assets/js/api/`)
+- React Query hooks: `useProducts` (with `keepPreviousData`), `useFields` (`assets/js/hooks/`)
+- Zod validation schemas for all API response types (`assets/js/types/api.ts`)
+- Global type declarations for `iwbeData` window object (`assets/js/types/global.d.ts`)
+- Build output: `assets/build/app.js`, `app.asset.php`
+
 ### Not Yet Implemented
-- Frontend React/TypeScript app (no package.json yet, empty asset directories)
+- Frontend UI components: Zustand store, grid/table (TanStack Table), filter UI, CSS/styling
 - Persistence layer: BatchSaver, ProductSaver, ChangeLog
 - Database migrations (table creation on activation) — Issue #25
 - Operations: SetValue, SearchReplace, MathOperation
@@ -57,13 +67,14 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - Custom SQL via `$wpdb->prepare()` (NOT `WP_Query` for main product filtering — performance)
 - DI container, PSR-4 autoloading via Composer
 
-### Frontend (planned)
-- React 18 + TypeScript
-- Zustand for local state (changes, undo/redo)
-- React Query (TanStack Query) for server state
-- TanStack Table + react-window for virtualized grid
-- Build: `@wordpress/scripts` or Vite with `@kucrut/vite-for-wp`
-- Validation: Zod
+### Frontend
+- React 18 + TypeScript (strict, no `any`)
+- `@wordpress/scripts` v30 (webpack) for build pipeline
+- React Query (TanStack Query) ^5.0 for server state
+- Zustand ^5.0 for local state (changes, undo/redo) — not yet implemented
+- TanStack Table ^8.0 + react-window for virtualized grid — not yet implemented
+- Zod ^3.23 for API response validation
+- `@wordpress/i18n` ^5.0 for translations
 
 ## Architectural Decisions
 
@@ -74,6 +85,8 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - **FieldType as PHP enum** — 11 types (Text, Textarea, Number, Price, Integer, Select, Boolean, Date, Taxonomy, Image, Gallery, CustomMeta)
 - **Rate limiting via WP transients** — simple, no external storage dependency
 - **REST permission model** — relies on `permission_callback` with `wp_rest` nonce (standard WP REST approach)
+- **@wordpress/scripts over Vite** — chose wp-scripts for seamless WP integration, automatic dependency extraction via `app.asset.php`
+- **Zod for API response validation** — runtime type safety at the client-server boundary, schemas mirror backend response shapes
 
 ## Directory Structure
 
@@ -82,6 +95,8 @@ ihumbak-woo-bulk-edit/
 ├── ihumbak-woo-bulk-edit.php     # Bootstrap, plugin header, autoload
 ├── uninstall.php                 # Cleanup on uninstall
 ├── composer.json
+├── tsconfig.json                 # TypeScript strict config, path aliases
+├── webpack.config.js             # Extends wp-scripts, custom entry & alias
 ├── src/                          # PHP (PSR-4: IhumbakWooBulkEdit\)
 │   ├── Plugin.php                # Main singleton, registers services & hooks
 │   ├── Container.php             # DI container with factory pattern
@@ -117,6 +132,7 @@ ihumbak-woo-bulk-edit/
 │   │       ├── SalePriceField.php
 │   │       ├── StockQuantityField.php
 │   │       └── StatusField.php
+│   │   └── Custom/               # (empty — prepared for custom meta fields)
 │   ├── Operations/               # (empty — planned)
 │   ├── Persistence/              # (empty — planned)
 │   ├── Integrations/             # (empty — planned)
@@ -125,9 +141,26 @@ ihumbak-woo-bulk-edit/
 │   │   └── RateLimiter.php       # Transient-based rate limiting
 │   └── Support/                  # (empty — planned)
 ├── assets/
-│   ├── js/                       # (empty — planned React app)
+│   ├── package.json              # Frontend dependencies (React, TanStack, Zustand, Zod)
+│   ├── js/
+│   │   ├── app.tsx               # React root, QueryClientProvider
+│   │   ├── components/
+│   │   │   └── App.tsx           # Main app component (placeholder)
+│   │   ├── api/
+│   │   │   ├── client.ts         # apiFetch wrapper, ApiError class
+│   │   │   ├── products.ts       # fetchProducts function
+│   │   │   ├── fields.ts         # fetchFields function
+│   │   │   └── index.ts          # Barrel export
+│   │   ├── hooks/
+│   │   │   ├── useProducts.ts    # React Query hook (keepPreviousData)
+│   │   │   ├── useFields.ts      # React Query hook
+│   │   │   └── index.ts          # Barrel export
+│   │   ├── types/
+│   │   │   ├── api.ts            # Zod schemas for Field, Product, Filter, etc.
+│   │   │   └── global.d.ts       # iwbeData interface (restUrl, nonce, adminUrl)
+│   │   └── store/                # (empty — Zustand planned)
 │   ├── css/                      # (empty — planned)
-│   └── build/                    # Compiled output (app.js, app.css, app.asset.php)
+│   └── build/                    # Compiled output (app.js, app.asset.php)
 ├── tests/
 │   ├── Unit/                     # (empty — planned)
 │   ├── Integration/              # (empty — planned)
@@ -212,9 +245,9 @@ Error format: `{ "code": "wbm_*", "message": "...", "data": { "status": 4xx, ...
 
 ```bash
 composer install          # PHP dependencies
-npm install               # JS dependencies (not yet configured)
-npm run start             # Dev server with HMR
-npm run build             # Production build
+cd assets && npm install  # JS dependencies (run from assets/)
+cd assets && npm run start  # Dev server with HMR
+cd assets && npm run build  # Production build
 composer test             # PHPUnit
 npx playwright test       # E2E tests
 ```

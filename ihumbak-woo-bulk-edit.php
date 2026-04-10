@@ -31,9 +31,20 @@ define('IWBE_PLUGIN_BASENAME', plugin_basename(__FILE__));
 /**
  * Autoloader.
  */
-if (file_exists(IWBE_PLUGIN_DIR . 'vendor/autoload.php')) {
-    require_once IWBE_PLUGIN_DIR . 'vendor/autoload.php';
+if (! file_exists(IWBE_PLUGIN_DIR . 'vendor/autoload.php')) {
+    add_action('admin_notices', static function (): void {
+        printf(
+            '<div class="notice notice-error"><p>%s</p></div>',
+            esc_html__(
+                'Ihumbak WooCommerce Bulk Edit: dependencies not installed. Run <code>composer install</code> in the plugin directory.',
+                'ihumbak-woo-bulk-edit'
+            )
+        );
+    });
+    return;
 }
+
+require_once IWBE_PLUGIN_DIR . 'vendor/autoload.php';
 
 /**
  * Declare HPOS compatibility.
