@@ -21,3 +21,6 @@ Thumbs.db
 # Environment
 .env
 .env.local
+
+# Playwright MCP
+.playwright-mcp/
