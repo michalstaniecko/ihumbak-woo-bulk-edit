@@ -11,7 +11,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 
 ## Implementation Status
 
-**Overall progress: ~45% — Backend MVP complete, frontend grid with pagination/sorting/selection working.**
+**Overall progress: ~55% — Backend MVP complete, frontend grid with filtering/pagination/sorting/selection/inline editing working.**
 
 ### Done (Backend MVP)
 - Plugin bootstrap with HPOS compatibility declaration
@@ -49,9 +49,19 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - LoadingSkeleton: animated placeholder during initial data fetch
 - CSS styling matching WooCommerce admin aesthetics (`assets/css/product-grid.css`)
 
+### Done (Frontend Editing & Filtering — Issues #10, #11, #12, #13)
+- Zustand stores: useChangesStore (change tracking, undo/redo with 50-step history), useEditingStore (active cell, draft value, validation)
+- Inline cell editing with change highlighting (TextEditor, NumberEditor, SelectEditor)
+- Batch save endpoint with progress bar, retry, and optimistic locking
+- Filter toolbar with quick search (name LIKE, debounced 300ms), multi-step "Add Filter" dropdown (field → operator → value)
+- Filter chips with remove buttons, "Clear all" to reset search + filters
+- All 6 operators in UI: equals, not equals, contains, not contains, is empty, is not empty
+- Filters combined by AND, auto-reload grid on change
+- Keyboard navigation (useGridKeyboardNav), undo/redo shortcuts (useUndoRedoShortcuts)
+- useBatchSave hook for batch save operations
+
 ### Not Yet Implemented
-- Frontend UI components: Zustand store (change tracking, undo/redo), inline editing, filter UI
-- Persistence layer: BatchSaver, ProductSaver, ChangeLog
+- Persistence layer: ProductSaver, ChangeLog
 - Database migrations (table creation on activation) — Issue #25
 - Operations: SetValue, SearchReplace, MathOperation
 - Filters CRUD endpoints (`GET|POST|PUT|DELETE /filters`)
@@ -81,7 +91,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - React 18 + TypeScript (strict, no `any`)
 - `@wordpress/scripts` v30 (webpack) for build pipeline
 - React Query (TanStack Query) ^5.0 for server state
-- Zustand ^5.0 for local state (changes, undo/redo) — not yet implemented
+- Zustand ^5.0 for local state (changes, undo/redo)
 - TanStack Table ^8.0 + react-window ^2.2 for virtualized grid
 - Zod ^3.23 for API response validation
 - `@wordpress/i18n` ^5.0 for translations
@@ -168,6 +178,7 @@ ihumbak-woo-bulk-edit/
 │   │   │       ├── GridRow.tsx         # Single row with cells
 │   │   │       ├── Pagination.tsx      # Page controls + per-page select
 │   │   │       ├── StatusBar.tsx       # Total/selected count
+│   │   │       ├── FilterToolbar.tsx    # Filter toolbar with search, add filter, chips
 │   │   │       ├── LoadingSkeleton.tsx  # Animated skeleton loader
 │   │   │       └── index.ts           # Barrel export
 │   │   ├── api/
@@ -183,7 +194,10 @@ ihumbak-woo-bulk-edit/
 │   │   │   ├── api.ts            # Zod schemas for Field, Product, Filter, etc.
 │   │   │   ├── grid.ts           # Grid-specific types (GridPaginationState)
 │   │   │   └── global.d.ts       # iwbeData interface (restUrl, nonce, adminUrl)
-│   │   └── store/                # (empty — Zustand planned)
+│   │   └── store/
+│   │       ├── useChangesStore.ts  # Change tracking with undo/redo
+│   │       ├── useEditingStore.ts  # Cell editing UI state
+│   │       └── index.ts           # Barrel export
 │   ├── css/
 │   │   └── product-grid.css      # Grid styles (WC admin aesthetic)
 │   └── build/                    # Compiled output (app.js, app.asset.php)
@@ -231,7 +245,7 @@ Endpoints and status:
 |--------|----------|--------|
 | `GET` | `/fields` | Implemented |
 | `POST` | `/products/query` | Implemented |
-| `PUT` | `/products/batch` | Stub (Issue #12) |
+| `PUT` | `/products/batch` | Implemented |
 | `DELETE` | `/products/batch` | Stub (Issue #23) |
 | `POST` | `/products/bulk-operation` | Planned |
 | `GET\|POST\|PUT\|DELETE` | `/filters` | Planned |
@@ -297,6 +311,5 @@ Priority order:
 
 ## Known TODOs (from code)
 
-- **Issue #12** — Implement `BatchSaver` for `PUT /products/batch`
 - **Issue #23** — Implement `BulkDelete` for `DELETE /products/batch`
 - **Issue #25** — `DatabaseMigrator` for table creation on plugin activation

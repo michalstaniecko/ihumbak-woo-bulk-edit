@@ -4,6 +4,7 @@ import { VirtualizedBody } from './VirtualizedBody';
 import { Pagination } from './Pagination';
 import { StatusBar } from './StatusBar';
 import { LoadingSkeleton } from './LoadingSkeleton';
+import { FilterToolbar } from './FilterToolbar';
 import { getColumnWidths } from './columnFactory';
 import { useGridKeyboardNav } from '@/hooks/useGridKeyboardNav';
 import { useBatchSave } from '@/hooks/useBatchSave';
@@ -20,6 +21,12 @@ export function ProductGrid(): JSX.Element {
 		selectedCount,
 		fields,
 		products,
+		filters,
+		searchQuery,
+		onSearchChange,
+		onAddFilter,
+		onRemoveFilter,
+		onClearAllFilters,
 	} = useProductGrid();
 
 	const batchSave = useBatchSave();
@@ -36,6 +43,16 @@ export function ProductGrid(): JSX.Element {
 
 	return (
 		<div className="iwbe-product-grid">
+			<FilterToolbar
+				fields={ fields }
+				filters={ filters }
+				searchQuery={ searchQuery }
+				onSearchChange={ onSearchChange }
+				onAddFilter={ onAddFilter }
+				onRemoveFilter={ onRemoveFilter }
+				onClearAll={ onClearAllFilters }
+			/>
+
 			<div className="iwbe-grid-header-wrapper">
 				<HeaderRow table={ table } columnWidths={ columnWidths } />
 			</div>

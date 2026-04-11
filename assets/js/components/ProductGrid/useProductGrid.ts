@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import {
 	useReactTable,
 	getCoreRowModel,
@@ -14,7 +14,7 @@ import { useProducts } from '@/hooks/useProducts';
 import { useFields } from '@/hooks/useFields';
 import { createColumns } from './columnFactory';
 import type { GridPaginationState } from '@/types/grid';
-import type { Field, Product, Sort } from '@/types/api';
+import type { Field, Product, ProductFilter, Sort } from '@/types/api';
 
 export interface UseProductGridReturn {
 	table: Table< Product >;
@@ -27,6 +27,12 @@ export interface UseProductGridReturn {
 	selectedCount: number;
 	fields: Field[];
 	products: Product[];
+	filters: ProductFilter[];
+	searchQuery: string;
+	onSearchChange: ( query: string ) => void;
+	onAddFilter: ( filter: ProductFilter ) => void;
+	onRemoveFilter: ( index: number ) => void;
+	onClearAllFilters: () => void;
 }
 
 function sortingStateToApiSort( sorting: SortingState ): Sort {
@@ -49,6 +55,54 @@ export function useProductGrid(): UseProductGridReturn {
 	const [ rowSelection, setRowSelection ] = useState< RowSelectionState >( {} );
 	const lastSelectedIndexRef = useRef< number | null >( null );
 
+	// Filter state
+	const [ filters, setFilters ] = useState< ProductFilter[] >( [] );
+	const [ searchQuery, setSearchQuery ] = useState( '' );
+	const [ debouncedSearch, setDebouncedSearch ] = useState( '' );
+
+	// Debounce search input (300ms)
+	useEffect( () => {
+		const timer = setTimeout( () => {
+			setDebouncedSearch( searchQuery );
+		}, 300 );
+		return () => clearTimeout( timer );
+	}, [ searchQuery ] );
+
+	// Reset to page 1 when filters or search change
+	useEffect( () => {
+		setPaginationState( ( prev ) => ( { ...prev, page: 1 } ) );
+	}, [ filters, debouncedSearch ] );
+
+	// Combine explicit filters with search query filters
+	const apiFilters = useMemo( () => {
+		const combined = [ ...filters ];
+		if ( debouncedSearch.trim() ) {
+			combined.push( {
+				field: 'name',
+				operator: 'LIKE',
+				value: debouncedSearch.trim(),
+			} );
+		}
+		return combined;
+	}, [ filters, debouncedSearch ] );
+
+	const onSearchChange = useCallback( ( query: string ) => {
+		setSearchQuery( query );
+	}, [] );
+
+	const onAddFilter = useCallback( ( filter: ProductFilter ) => {
+		setFilters( ( prev ) => [ ...prev, filter ] );
+	}, [] );
+
+	const onRemoveFilter = useCallback( ( index: number ) => {
+		setFilters( ( prev ) => prev.filter( ( _, i ) => i !== index ) );
+	}, [] );
+
+	const onClearAllFilters = useCallback( () => {
+		setFilters( [] );
+		setSearchQuery( '' );
+	}, [] );
+
 	const { data: fields } = useFields();
 	const apiSort = useMemo( () => sortingStateToApiSort( sorting ), [ sorting ] );
 
@@ -62,7 +116,7 @@ export function useProductGrid(): UseProductGridReturn {
 			page: pagination.page,
 			per_page: pagination.perPage,
 		},
-		filters: [],
+		filters: apiFilters,
 	} );
 
 	const columns = useMemo(
@@ -154,5 +208,11 @@ export function useProductGrid(): UseProductGridReturn {
 		selectedCount,
 		fields: fields ?? [],
 		products: productsData?.items ?? [],
+		filters,
+		searchQuery,
+		onSearchChange,
+		onAddFilter,
+		onRemoveFilter,
+		onClearAllFilters,
 	};
 }
