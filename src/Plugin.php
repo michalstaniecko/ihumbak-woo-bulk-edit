@@ -9,6 +9,8 @@ use IhumbakWooBulkEdit\Admin\AssetsLoader;
 use IhumbakWooBulkEdit\Api\FieldsController;
 use IhumbakWooBulkEdit\Api\ProductsController;
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
+use IhumbakWooBulkEdit\Persistence\BatchSaver;
+use IhumbakWooBulkEdit\Persistence\ProductSaver;
 use IhumbakWooBulkEdit\Security\CapabilityChecker;
 use IhumbakWooBulkEdit\Security\RateLimiter;
 
@@ -113,11 +115,26 @@ final class Plugin
         );
 
         $this->container->set(
+            ProductSaver::class,
+            static fn (Container $c): ProductSaver => new ProductSaver(
+                $c->get(FieldRegistry::class),
+            )
+        );
+
+        $this->container->set(
+            BatchSaver::class,
+            static fn (Container $c): BatchSaver => new BatchSaver(
+                $c->get(ProductSaver::class),
+            )
+        );
+
+        $this->container->set(
             ProductsController::class,
             static fn (Container $c): ProductsController => new ProductsController(
                 $c->get(FieldRegistry::class),
                 $c->get(CapabilityChecker::class),
                 $c->get(RateLimiter::class),
+                $c->get(BatchSaver::class),
             )
         );
     }

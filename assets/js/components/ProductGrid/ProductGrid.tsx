@@ -6,6 +6,7 @@ import { StatusBar } from './StatusBar';
 import { LoadingSkeleton } from './LoadingSkeleton';
 import { getColumnWidths } from './columnFactory';
 import { useGridKeyboardNav } from '@/hooks/useGridKeyboardNav';
+import { useBatchSave } from '@/hooks/useBatchSave';
 
 export function ProductGrid(): JSX.Element {
 	const {
@@ -18,7 +19,10 @@ export function ProductGrid(): JSX.Element {
 		totalPages,
 		selectedCount,
 		fields,
+		products,
 	} = useProductGrid();
+
+	const batchSave = useBatchSave();
 
 	useGridKeyboardNav( table, fields );
 
@@ -61,6 +65,8 @@ export function ProductGrid(): JSX.Element {
 					total={ totalItems }
 					selectedCount={ selectedCount }
 					isFetching={ isFetching && ! isLoading }
+					products={ products }
+					batchSave={ batchSave }
 				/>
 			</div>
 		</div>

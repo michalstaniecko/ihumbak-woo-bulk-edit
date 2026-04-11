@@ -7,6 +7,7 @@ namespace IhumbakWooBulkEdit\Api;
 use IhumbakWooBulkEdit\Query\QueryBuilder;
 use IhumbakWooBulkEdit\Query\FilterParser;
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
+use IhumbakWooBulkEdit\Persistence\BatchSaver;
 use IhumbakWooBulkEdit\Security\CapabilityChecker;
 use IhumbakWooBulkEdit\Security\RateLimiter;
 use WP_Error;
@@ -25,6 +26,7 @@ final class ProductsController extends RestController
         private readonly FieldRegistry $fieldRegistry,
         private readonly CapabilityChecker $capabilityChecker,
         private readonly RateLimiter $rateLimiter,
+        private readonly BatchSaver $batchSaver,
     ) {}
 
     public function register_routes(): void
@@ -43,6 +45,7 @@ final class ProductsController extends RestController
                 'methods'             => 'PUT',
                 'callback'            => [$this, 'batch_save'],
                 'permission_callback' => [$this->capabilityChecker, 'permissionWrite'],
+                'args'                => $this->getBatchSaveArgs(),
             ],
         ]);
 
@@ -115,11 +118,33 @@ final class ProductsController extends RestController
             );
         }
 
-        // BatchSaver will be implemented in Issue #12.
-        return $this->success([
-            'message' => 'Batch save endpoint ready — BatchSaver pending implementation.',
-            'count'   => count($changes),
-        ]);
+        // Validate each change item structure.
+        foreach ($changes as $index => $change) {
+            if (
+                ! is_array($change)
+                || ! isset($change['id'], $change['field'], $change['post_modified'])
+                || ! is_numeric($change['id'])
+                || ! is_string($change['field'])
+                || ! is_string($change['post_modified'])
+                || ! array_key_exists('value', $change)
+            ) {
+                return $this->error(
+                    'wbm_invalid_change_item',
+                    sprintf(
+                        /* translators: %d: index of the invalid change */
+                        __('Invalid change item at index %d. Required: id (int), field (string), value, post_modified (string).', 'ihumbak-woo-bulk-edit'),
+                        $index
+                    ),
+                    400
+                );
+            }
+        }
+
+        $batchSize = min(500, max(10, (int) ($request->get_param('batch_size') ?? 50)));
+
+        $result = $this->batchSaver->process($changes, $batchSize);
+
+        return $this->success($result);
     }
 
     /**
@@ -148,6 +173,25 @@ final class ProductsController extends RestController
             'message' => 'Batch delete endpoint ready — BulkDelete pending implementation.',
             'count'   => count($ids),
         ]);
+    }
+
+    private function getBatchSaveArgs(): array
+    {
+        return [
+            'changes' => [
+                'type'     => 'array',
+                'required' => true,
+                'items'    => [
+                    'type' => 'object',
+                ],
+            ],
+            'batch_size' => [
+                'type'    => 'integer',
+                'default' => 50,
+                'minimum' => 10,
+                'maximum' => 500,
+            ],
+        ];
     }
 
     private function getQueryArgs(): array

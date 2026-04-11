@@ -1,6 +1,11 @@
 import { apiFetch } from './client';
-import { ProductsResponseSchema } from '@/types/api';
-import type { ProductsResponse, ProductsQueryParams } from '@/types/api';
+import { ProductsResponseSchema, BatchSaveResponseSchema } from '@/types/api';
+import type {
+	ProductsResponse,
+	ProductsQueryParams,
+	BatchSaveItem,
+	BatchSaveResponse,
+} from '@/types/api';
 
 export function fetchProducts(
 	params: ProductsQueryParams,
@@ -9,6 +14,17 @@ export function fetchProducts(
 	return apiFetch( 'products/query', ProductsResponseSchema, {
 		method: 'POST',
 		body: params,
+		signal,
+	} );
+}
+
+export function batchSave(
+	changes: BatchSaveItem[],
+	signal?: AbortSignal
+): Promise< BatchSaveResponse > {
+	return apiFetch( 'products/batch', BatchSaveResponseSchema, {
+		method: 'PUT',
+		body: { changes },
 		signal,
 	} );
 }

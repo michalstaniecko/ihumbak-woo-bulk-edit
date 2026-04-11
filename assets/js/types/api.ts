@@ -99,6 +99,31 @@ export const ProductsQueryParamsSchema = z.object( {
 } );
 export type ProductsQueryParams = z.infer< typeof ProductsQueryParamsSchema >;
 
+// ── Batch Save ──────────────────────────────────────────────
+export const BatchSaveItemSchema = z.object( {
+	id: z.number(),
+	field: z.string(),
+	value: z.unknown(),
+	post_modified: z.string(),
+} );
+export type BatchSaveItem = z.infer< typeof BatchSaveItemSchema >;
+
+export const BatchSaveResultSchema = z.object( {
+	status: z.enum( [ 'success', 'error' ] ),
+	id: z.number(),
+	message: z.string().optional(),
+	code: z.string().optional(),
+} );
+export type BatchSaveResult = z.infer< typeof BatchSaveResultSchema >;
+
+export const BatchSaveResponseSchema = z.object( {
+	results: z.array( BatchSaveResultSchema ),
+	total: z.number(),
+	success: z.number(),
+	errors: z.number(),
+} );
+export type BatchSaveResponse = z.infer< typeof BatchSaveResponseSchema >;
+
 // ── API Error ────────────────────────────────────────────────
 export const ApiErrorDataSchema = z
 	.object( {

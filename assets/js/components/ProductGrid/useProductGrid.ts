@@ -16,7 +16,7 @@ import { createColumns } from './columnFactory';
 import type { GridPaginationState } from '@/types/grid';
 import type { Field, Product, Sort } from '@/types/api';
 
-interface UseProductGridReturn {
+export interface UseProductGridReturn {
 	table: Table< Product >;
 	isLoading: boolean;
 	isFetching: boolean;
@@ -26,6 +26,7 @@ interface UseProductGridReturn {
 	totalPages: number;
 	selectedCount: number;
 	fields: Field[];
+	products: Product[];
 }
 
 function sortingStateToApiSort( sorting: SortingState ): Sort {
@@ -152,5 +153,6 @@ export function useProductGrid(): UseProductGridReturn {
 		totalPages: productsData?.pages ?? 0,
 		selectedCount,
 		fields: fields ?? [],
+		products: productsData?.items ?? [],
 	};
 }

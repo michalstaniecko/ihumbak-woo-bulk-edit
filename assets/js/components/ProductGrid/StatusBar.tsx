@@ -1,20 +1,28 @@
 import { __, sprintf } from '@wordpress/i18n';
 import { useChangesStore, useEditingStore } from '@/store';
+import type { Product } from '@/types/api';
+import type { UseBatchSaveReturn } from '@/hooks/useBatchSave';
 
 interface StatusBarProps {
 	total: number;
 	selectedCount: number;
 	isFetching: boolean;
+	products: Product[];
+	batchSave: UseBatchSaveReturn;
 }
 
 export function StatusBar( {
 	total,
 	selectedCount,
 	isFetching,
+	products,
+	batchSave,
 }: StatusBarProps ): JSX.Element {
 	const changes = useChangesStore( ( state ) => state.changes );
 	const discardAll = useChangesStore( ( state ) => state.discardAll );
 	const stopEditing = useEditingStore( ( state ) => state.stopEditing );
+
+	const { progress, isSaving, save, cancel, reset } = batchSave;
 
 	const changedProductsCount = Object.keys( changes ).length;
 	let changedCellsCount = 0;
@@ -22,6 +30,91 @@ export function StatusBar( {
 		changedCellsCount += Object.keys( changes[ productId ] ).length;
 	}
 	const hasChanges = changedProductsCount > 0;
+
+	const handleSave = (): void => {
+		void save( products );
+	};
+
+	// Progress bar rendering.
+	if ( isSaving ) {
+		const percent =
+			progress.total > 0
+				? Math.round(
+						( ( progress.saved + progress.errors ) /
+							progress.total ) *
+							100
+					)
+				: 0;
+
+		return (
+			<div className="iwbe-status-bar">
+				<div className="iwbe-save-progress">
+					<div className="iwbe-progress-bar">
+						<div
+							className="iwbe-progress-fill"
+							style={ { width: `${ percent }%` } }
+						/>
+					</div>
+					<span className="iwbe-progress-text">
+						{ sprintf(
+							/* translators: %1$d: saved count, %2$d: total count */
+							__(
+								'%1$d / %2$d products',
+								'ihumbak-woo-bulk-edit'
+							),
+							progress.saved + progress.errors,
+							progress.total
+						) }
+					</span>
+					<button
+						type="button"
+						className="iwbe-btn-cancel"
+						onClick={ cancel }
+					>
+						{ __( 'Cancel', 'ihumbak-woo-bulk-edit' ) }
+					</button>
+				</div>
+			</div>
+		);
+	}
+
+	// Summary after save completes.
+	if ( progress.status === 'done' || progress.status === 'cancelled' ) {
+		return (
+			<div className="iwbe-status-bar">
+				<div className="iwbe-save-summary">
+					{ progress.status === 'cancelled' && (
+						<span className="iwbe-summary-cancelled">
+							{ __( 'Cancelled.', 'ihumbak-woo-bulk-edit' ) }
+						</span>
+					) }
+					<span className="iwbe-summary-success">
+						{ sprintf(
+							/* translators: %d: number of saved products */
+							__( '%d saved', 'ihumbak-woo-bulk-edit' ),
+							progress.saved
+						) }
+					</span>
+					{ progress.errors > 0 && (
+						<span className="iwbe-summary-errors">
+							{ sprintf(
+								/* translators: %d: number of errors */
+								__( '%d errors', 'ihumbak-woo-bulk-edit' ),
+								progress.errors
+							) }
+						</span>
+					) }
+					<button
+						type="button"
+						className="iwbe-btn-dismiss"
+						onClick={ reset }
+					>
+						{ __( 'OK', 'ihumbak-woo-bulk-edit' ) }
+					</button>
+				</div>
+			</div>
+		);
+	}
 
 	return (
 		<div className="iwbe-status-bar">
@@ -56,6 +149,13 @@ export function StatusBar( {
 							changedProductsCount
 						) }
 					</span>
+					<button
+						type="button"
+						className="iwbe-btn-save"
+						onClick={ handleSave }
+					>
+						{ __( 'Save Changes', 'ihumbak-woo-bulk-edit' ) }
+					</button>
 					<button
 						type="button"
 						className="iwbe-btn-discard"
