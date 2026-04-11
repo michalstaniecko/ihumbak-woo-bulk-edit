@@ -11,7 +11,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 
 ## Implementation Status
 
-**Overall progress: ~35% — Backend MVP complete, frontend foundation in place (build pipeline, API client, hooks).**
+**Overall progress: ~45% — Backend MVP complete, frontend grid with pagination/sorting/selection working.**
 
 ### Done (Backend MVP)
 - Plugin bootstrap with HPOS compatibility declaration
@@ -37,10 +37,20 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - React Query hooks: `useProducts` (with `keepPreviousData`), `useFields` (`assets/js/hooks/`)
 - Zod validation schemas for all API response types (`assets/js/types/api.ts`)
 - Global type declarations for `iwbeData` window object (`assets/js/types/global.d.ts`)
-- Build output: `assets/build/app.js`, `app.asset.php`
+- Build output: `assets/build/app.js`, `app.css`, `app.asset.php`
+
+### Done (Frontend Grid — Issue #9)
+- ProductGrid component with TanStack Table v8 + react-window v2 virtualization
+- Dynamic columns generated from `/fields` API (columnFactory.ts)
+- Server-side pagination: page controls (First/Prev/Next/Last), per-page select (25–500)
+- Column sorting: clickable headers, asc/desc toggle, sort resets page to 1
+- Checkbox row selection: single click + Shift+click range selection
+- StatusBar: total products count, selected count, background fetch indicator
+- LoadingSkeleton: animated placeholder during initial data fetch
+- CSS styling matching WooCommerce admin aesthetics (`assets/css/product-grid.css`)
 
 ### Not Yet Implemented
-- Frontend UI components: Zustand store, grid/table (TanStack Table), filter UI, CSS/styling
+- Frontend UI components: Zustand store (change tracking, undo/redo), inline editing, filter UI
 - Persistence layer: BatchSaver, ProductSaver, ChangeLog
 - Database migrations (table creation on activation) — Issue #25
 - Operations: SetValue, SearchReplace, MathOperation
@@ -72,7 +82,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - `@wordpress/scripts` v30 (webpack) for build pipeline
 - React Query (TanStack Query) ^5.0 for server state
 - Zustand ^5.0 for local state (changes, undo/redo) — not yet implemented
-- TanStack Table ^8.0 + react-window for virtualized grid — not yet implemented
+- TanStack Table ^8.0 + react-window ^2.2 for virtualized grid
 - Zod ^3.23 for API response validation
 - `@wordpress/i18n` ^5.0 for translations
 
@@ -87,6 +97,9 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - **REST permission model** — relies on `permission_callback` with `wp_rest` nonce (standard WP REST approach)
 - **@wordpress/scripts over Vite** — chose wp-scripts for seamless WP integration, automatic dependency extraction via `app.asset.php`
 - **Zod for API response validation** — runtime type safety at the client-server boundary, schemas mirror backend response shapes
+- **Div-based grid layout** — ProductGrid uses flex `<div>` elements instead of `<table>` for compatibility with react-window v2 (which renders `<div>` containers); column widths enforced via inline styles
+- **Two-section grid** — separate header wrapper and scrollable body wrapper, both sharing the same column widths from `getColumnWidths()`
+- **PHP empty array caveat** — PHP `json_encode([])` returns `[]` not `{}`, so Zod `FieldSchema.options` uses `z.union([z.record(), z.array(z.never())]).transform()` to handle both formats
 
 ## Directory Structure
 
@@ -145,7 +158,18 @@ ihumbak-woo-bulk-edit/
 │   ├── js/
 │   │   ├── app.tsx               # React root, QueryClientProvider
 │   │   ├── components/
-│   │   │   └── App.tsx           # Main app component (placeholder)
+│   │   │   ├── App.tsx           # Main app component, mounts ProductGrid
+│   │   │   └── ProductGrid/
+│   │   │       ├── ProductGrid.tsx     # Main grid container
+│   │   │       ├── useProductGrid.ts   # Central hook (table, sort, pagination, selection)
+│   │   │       ├── columnFactory.ts    # Field[] → ColumnDef[] mapping
+│   │   │       ├── VirtualizedBody.tsx # react-window List integration
+│   │   │       ├── HeaderRow.tsx       # Header with sort indicators
+│   │   │       ├── GridRow.tsx         # Single row with cells
+│   │   │       ├── Pagination.tsx      # Page controls + per-page select
+│   │   │       ├── StatusBar.tsx       # Total/selected count
+│   │   │       ├── LoadingSkeleton.tsx  # Animated skeleton loader
+│   │   │       └── index.ts           # Barrel export
 │   │   ├── api/
 │   │   │   ├── client.ts         # apiFetch wrapper, ApiError class
 │   │   │   ├── products.ts       # fetchProducts function
@@ -157,9 +181,11 @@ ihumbak-woo-bulk-edit/
 │   │   │   └── index.ts          # Barrel export
 │   │   ├── types/
 │   │   │   ├── api.ts            # Zod schemas for Field, Product, Filter, etc.
+│   │   │   ├── grid.ts           # Grid-specific types (GridPaginationState)
 │   │   │   └── global.d.ts       # iwbeData interface (restUrl, nonce, adminUrl)
 │   │   └── store/                # (empty — Zustand planned)
-│   ├── css/                      # (empty — planned)
+│   ├── css/
+│   │   └── product-grid.css      # Grid styles (WC admin aesthetic)
 │   └── build/                    # Compiled output (app.js, app.asset.php)
 ├── tests/
 │   ├── Unit/                     # (empty — planned)
