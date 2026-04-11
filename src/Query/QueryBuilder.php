@@ -31,15 +31,37 @@ final class QueryBuilder
      * Fields stored in wp_posts are direct columns; meta fields require a JOIN.
      */
     private const POST_COLUMNS = [
-        'name'   => 'p.post_title',
-        'status' => 'p.post_status',
+        'name'             => 'p.post_title',
+        'slug'             => 'p.post_name',
+        'status'           => 'p.post_status',
+        'description'      => 'p.post_content',
+        'short_description' => 'p.post_excerpt',
+        'menu_order'       => 'p.menu_order',
+        'date_created'     => 'p.post_date',
+        'reviews_allowed'  => 'p.comment_status',
     ];
 
     private const META_KEYS = [
-        'sku'            => '_sku',
-        'regular_price'  => '_regular_price',
-        'sale_price'     => '_sale_price',
-        'stock_quantity' => '_stock',
+        'sku'                => '_sku',
+        'regular_price'      => '_regular_price',
+        'sale_price'         => '_sale_price',
+        'stock_quantity'     => '_stock',
+        'manage_stock'       => '_manage_stock',
+        'backorders'         => '_backorders',
+        'sold_individually'  => '_sold_individually',
+        'weight'             => '_weight',
+        'length'             => '_length',
+        'width'              => '_width',
+        'height'             => '_height',
+        'virtual'            => '_virtual',
+        'downloadable'       => '_downloadable',
+        'download_limit'     => '_download_limit',
+        'download_expiry'    => '_download_expiry',
+        'purchase_note'      => '_purchase_note',
+        'external_url'       => '_product_url',
+        'button_text'        => '_button_text',
+        'featured'           => '_featured',
+        'catalog_visibility' => '_visibility',
     ];
 
     /**
@@ -185,7 +207,7 @@ final class QueryBuilder
     {
         global $wpdb;
 
-        $select = "SELECT DISTINCT p.ID, p.post_title AS name, p.post_status AS status, p.post_modified";
+        $select = "SELECT DISTINCT p.ID, p.post_title AS name, p.post_name AS slug, p.post_status AS status, p.post_content AS description, p.post_excerpt AS short_description, p.menu_order, p.post_date AS date_created, p.comment_status AS reviews_allowed, p.post_modified";
         $from = " FROM {$wpdb->posts} p";
         $joins = $this->buildJoins();
         $where = $this->buildWhere();
@@ -266,12 +288,25 @@ final class QueryBuilder
         $ids = array_column($rows, 'ID');
         $placeholders = implode(',', array_fill(0, count($ids), '%d'));
 
+        $metaKeysToFetch = [
+            '_sku', '_regular_price', '_sale_price', '_stock',
+            '_manage_stock', '_backorders', '_sold_individually',
+            '_weight', '_length', '_width', '_height',
+            '_virtual', '_downloadable', '_download_limit', '_download_expiry',
+            '_purchase_note', '_product_url', '_button_text',
+            '_featured', '_visibility',
+            '_thumbnail_id', '_product_image_gallery',
+            '_crosssell_ids', '_upsell_ids',
+        ];
+
+        $metaPlaceholders = implode(',', array_fill(0, count($metaKeysToFetch), '%s'));
+
         $metaRows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT post_id, meta_key, meta_value FROM {$wpdb->postmeta}
                  WHERE post_id IN ({$placeholders})
-                 AND meta_key IN ('_sku', '_regular_price', '_sale_price', '_stock', '_thumbnail_id')",
-                ...$ids
+                 AND meta_key IN ({$metaPlaceholders})",
+                ...array_merge($ids, $metaKeysToFetch)
             ),
             ARRAY_A
         ) ?: [];
@@ -281,21 +316,86 @@ final class QueryBuilder
             $metaMap[(int) $meta['post_id']][$meta['meta_key']] = $meta['meta_value'];
         }
 
+        // Fetch taxonomy terms (categories, tags, shipping class).
+        $termRows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT tr.object_id, tt.taxonomy, t.name, t.term_id
+                 FROM {$wpdb->term_relationships} tr
+                 INNER JOIN {$wpdb->term_taxonomy} tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+                 INNER JOIN {$wpdb->terms} t ON tt.term_id = t.term_id
+                 WHERE tr.object_id IN ({$placeholders})
+                 AND tt.taxonomy IN ('product_cat', 'product_tag', 'product_shipping_class')",
+                ...$ids
+            ),
+            ARRAY_A
+        ) ?: [];
+
+        $termMap = [];
+        foreach ($termRows as $term) {
+            $termMap[(int) $term['object_id']][$term['taxonomy']][] = [
+                'id'   => (int) $term['term_id'],
+                'name' => $term['name'],
+            ];
+        }
+
         $products = [];
         foreach ($rows as $row) {
             $id = (int) $row['ID'];
             $meta = $metaMap[$id] ?? [];
+            $terms = $termMap[$id] ?? [];
+
+            $galleryIds = ! empty($meta['_product_image_gallery'])
+                ? array_map('intval', explode(',', $meta['_product_image_gallery']))
+                : [];
+
+            $crossSellIds = ! empty($meta['_crosssell_ids'])
+                ? array_map('intval', maybe_unserialize($meta['_crosssell_ids']))
+                : [];
+
+            $upsellIds = ! empty($meta['_upsell_ids'])
+                ? array_map('intval', maybe_unserialize($meta['_upsell_ids']))
+                : [];
 
             $products[] = [
-                'id'             => $id,
-                'name'           => $row['name'],
-                'status'         => $row['status'],
-                'sku'            => $meta['_sku'] ?? '',
-                'regular_price'  => $meta['_regular_price'] ?? '',
-                'sale_price'     => $meta['_sale_price'] ?? '',
-                'stock_quantity' => isset($meta['_stock']) ? (int) $meta['_stock'] : null,
-                'post_modified'  => $row['post_modified'],
-                'thumbnail_id'   => isset($meta['_thumbnail_id']) ? (int) $meta['_thumbnail_id'] : null,
+                'id'                 => $id,
+                'name'               => $row['name'],
+                'slug'               => $row['slug'],
+                'status'             => $row['status'],
+                'description'        => $row['description'] ?? '',
+                'short_description'  => $row['short_description'] ?? '',
+                'menu_order'         => (int) ($row['menu_order'] ?? 0),
+                'date_created'       => $row['date_created'] ?? '',
+                'reviews_allowed'    => ($row['reviews_allowed'] ?? 'open') === 'open',
+                'sku'                => $meta['_sku'] ?? '',
+                'regular_price'      => $meta['_regular_price'] ?? '',
+                'sale_price'         => $meta['_sale_price'] ?? '',
+                'manage_stock'       => ($meta['_manage_stock'] ?? 'no') === 'yes',
+                'stock_quantity'     => isset($meta['_stock']) ? (int) $meta['_stock'] : null,
+                'backorders'         => $meta['_backorders'] ?? 'no',
+                'sold_individually'  => ($meta['_sold_individually'] ?? 'no') === 'yes',
+                'weight'             => $meta['_weight'] ?? '',
+                'length'             => $meta['_length'] ?? '',
+                'width'              => $meta['_width'] ?? '',
+                'height'             => $meta['_height'] ?? '',
+                'virtual'            => ($meta['_virtual'] ?? 'no') === 'yes',
+                'downloadable'       => ($meta['_downloadable'] ?? 'no') === 'yes',
+                'download_limit'     => (int) ($meta['_download_limit'] ?? -1),
+                'download_expiry'    => (int) ($meta['_download_expiry'] ?? -1),
+                'purchase_note'      => $meta['_purchase_note'] ?? '',
+                'external_url'       => $meta['_product_url'] ?? '',
+                'button_text'        => $meta['_button_text'] ?? '',
+                'featured'           => ($meta['_featured'] ?? 'no') === 'yes',
+                'catalog_visibility' => $meta['_visibility'] ?? 'visible',
+                'thumbnail_id'       => isset($meta['_thumbnail_id']) ? (int) $meta['_thumbnail_id'] : null,
+                'gallery'            => $galleryIds,
+                'categories'         => $terms['product_cat'] ?? [],
+                'tags'               => $terms['product_tag'] ?? [],
+                'shipping_class'     => ! empty($terms['product_shipping_class'])
+                    ? $terms['product_shipping_class'][0]['name']
+                    : '',
+                'cross_sells'        => $crossSellIds,
+                'upsells'            => $upsellIds,
+                'post_modified'      => $row['post_modified'],
             ];
         }
 

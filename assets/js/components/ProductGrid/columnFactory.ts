@@ -61,11 +61,34 @@ export function renderCellValue(
 				? __( 'Yes', 'ihumbak-woo-bulk-edit' )
 				: __( 'No', 'ihumbak-woo-bulk-edit' );
 
+		case 'taxonomy':
+			if ( Array.isArray( value ) ) {
+				if ( value.length === 0 ) {
+					return '\u2014';
+				}
+				return value
+					.map( ( term: { name?: string } ) => term.name ?? '' )
+					.filter( Boolean )
+					.join( ', ' );
+			}
+			return String( value );
+
+		case 'gallery':
+			if ( Array.isArray( value ) ) {
+				return value.length > 0
+					? `${ value.length } ${ __( 'images', 'ihumbak-woo-bulk-edit' ) }`
+					: '\u2014';
+			}
+			return '\u2014';
+
 		case 'integer':
 		case 'number':
 			return String( value );
 
 		default:
+			if ( Array.isArray( value ) ) {
+				return value.length > 0 ? value.join( ', ' ) : '\u2014';
+			}
 			return String( value );
 	}
 }

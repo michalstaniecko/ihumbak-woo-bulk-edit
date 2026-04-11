@@ -4,12 +4,41 @@ declare(strict_types=1);
 
 namespace IhumbakWooBulkEdit\Fields;
 
+use IhumbakWooBulkEdit\Fields\Core\BackordersField;
+use IhumbakWooBulkEdit\Fields\Core\ButtonTextField;
+use IhumbakWooBulkEdit\Fields\Core\CatalogVisibilityField;
+use IhumbakWooBulkEdit\Fields\Core\CategoriesField;
+use IhumbakWooBulkEdit\Fields\Core\CrossSellsField;
+use IhumbakWooBulkEdit\Fields\Core\DateCreatedField;
+use IhumbakWooBulkEdit\Fields\Core\DescriptionField;
+use IhumbakWooBulkEdit\Fields\Core\DownloadableField;
+use IhumbakWooBulkEdit\Fields\Core\DownloadExpiryField;
+use IhumbakWooBulkEdit\Fields\Core\DownloadLimitField;
+use IhumbakWooBulkEdit\Fields\Core\ExternalUrlField;
+use IhumbakWooBulkEdit\Fields\Core\FeaturedField;
+use IhumbakWooBulkEdit\Fields\Core\GalleryField;
+use IhumbakWooBulkEdit\Fields\Core\HeightField;
+use IhumbakWooBulkEdit\Fields\Core\LengthField;
+use IhumbakWooBulkEdit\Fields\Core\ManageStockField;
+use IhumbakWooBulkEdit\Fields\Core\MenuOrderField;
 use IhumbakWooBulkEdit\Fields\Core\NameField;
-use IhumbakWooBulkEdit\Fields\Core\SkuField;
+use IhumbakWooBulkEdit\Fields\Core\PurchaseNoteField;
 use IhumbakWooBulkEdit\Fields\Core\RegularPriceField;
+use IhumbakWooBulkEdit\Fields\Core\ReviewsAllowedField;
 use IhumbakWooBulkEdit\Fields\Core\SalePriceField;
-use IhumbakWooBulkEdit\Fields\Core\StockQuantityField;
+use IhumbakWooBulkEdit\Fields\Core\ShippingClassField;
+use IhumbakWooBulkEdit\Fields\Core\ShortDescriptionField;
+use IhumbakWooBulkEdit\Fields\Core\SkuField;
+use IhumbakWooBulkEdit\Fields\Core\SlugField;
+use IhumbakWooBulkEdit\Fields\Core\SoldIndividuallyField;
 use IhumbakWooBulkEdit\Fields\Core\StatusField;
+use IhumbakWooBulkEdit\Fields\Core\StockQuantityField;
+use IhumbakWooBulkEdit\Fields\Core\TagsField;
+use IhumbakWooBulkEdit\Fields\Core\ThumbnailField;
+use IhumbakWooBulkEdit\Fields\Core\UpsellsField;
+use IhumbakWooBulkEdit\Fields\Core\VirtualField;
+use IhumbakWooBulkEdit\Fields\Core\WeightField;
+use IhumbakWooBulkEdit\Fields\Core\WidthField;
 
 /**
  * Registry of all available product fields.
@@ -84,12 +113,62 @@ final class FieldRegistry
     private function registerCoreFields(): void
     {
         $coreFields = [
+            // Identifiers & basic info.
             new NameField(),
+            new SlugField(),
             new SkuField(),
+            new StatusField(),
+            new CatalogVisibilityField(),
+            new FeaturedField(),
+            new DateCreatedField(),
+
+            // Descriptions.
+            new DescriptionField(),
+            new ShortDescriptionField(),
+
+            // Pricing.
             new RegularPriceField(),
             new SalePriceField(),
+
+            // Stock & inventory.
+            new ManageStockField(),
             new StockQuantityField(),
-            new StatusField(),
+            new BackordersField(),
+            new SoldIndividuallyField(),
+
+            // Dimensions & shipping.
+            new WeightField(),
+            new LengthField(),
+            new WidthField(),
+            new HeightField(),
+            new ShippingClassField(),
+
+            // Downloadable & virtual.
+            new VirtualField(),
+            new DownloadableField(),
+            new DownloadLimitField(),
+            new DownloadExpiryField(),
+
+            // External product.
+            new ExternalUrlField(),
+            new ButtonTextField(),
+
+            // Taxonomy.
+            new CategoriesField(),
+            new TagsField(),
+
+            // Images.
+            new ThumbnailField(),
+            new GalleryField(),
+
+            // Linked products.
+            new CrossSellsField(),
+            new UpsellsField(),
+
+            // Meta.
+            new PurchaseNoteField(),
+            new ReviewsAllowedField(),
+            new MenuOrderField(),
         ];
 
         foreach ($coreFields as $field) {

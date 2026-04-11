@@ -37,16 +37,51 @@ export const FieldsResponseSchema = z.array( FieldSchema );
 export type FieldsResponse = z.infer< typeof FieldsResponseSchema >;
 
 // ── Product ──────────────────────────────────────────────────
+// ── Taxonomy term (used by categories, tags) ───────────────
+export const TaxonomyTermSchema = z.object( {
+	id: z.number(),
+	name: z.string(),
+} );
+export type TaxonomyTerm = z.infer< typeof TaxonomyTermSchema >;
+
 export const ProductSchema = z.object( {
 	id: z.number(),
 	name: z.string(),
+	slug: z.string(),
 	status: z.string(),
+	description: z.string(),
+	short_description: z.string(),
+	menu_order: z.number(),
+	date_created: z.string(),
+	reviews_allowed: z.boolean(),
 	sku: z.string(),
 	regular_price: z.string(),
 	sale_price: z.string(),
+	manage_stock: z.boolean(),
 	stock_quantity: z.number().nullable(),
-	post_modified: z.string(),
+	backorders: z.string(),
+	sold_individually: z.boolean(),
+	weight: z.string(),
+	length: z.string(),
+	width: z.string(),
+	height: z.string(),
+	virtual: z.boolean(),
+	downloadable: z.boolean(),
+	download_limit: z.number(),
+	download_expiry: z.number(),
+	purchase_note: z.string(),
+	external_url: z.string(),
+	button_text: z.string(),
+	featured: z.boolean(),
+	catalog_visibility: z.string(),
 	thumbnail_id: z.number().nullable(),
+	gallery: z.array( z.number() ),
+	categories: z.array( TaxonomyTermSchema ),
+	tags: z.array( TaxonomyTermSchema ),
+	shipping_class: z.string(),
+	cross_sells: z.array( z.number() ),
+	upsells: z.array( z.number() ),
+	post_modified: z.string(),
 } );
 export type Product = z.infer< typeof ProductSchema >;
 
