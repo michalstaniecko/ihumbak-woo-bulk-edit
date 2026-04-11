@@ -101,6 +101,69 @@
 	font-style: italic;
 }
 
+/* ── Cell states ─────────────────────────────────────────── */
+
+.iwbe-td-focused {
+	outline: 2px solid #2271b1;
+	outline-offset: -2px;
+}
+
+.iwbe-td-changed {
+	background: #fcf9e8;
+}
+
+.iwbe-row-selected .iwbe-td-changed {
+	background: #e8f0d8;
+}
+
+.iwbe-td-editing {
+	padding: 0;
+	position: relative;
+	width: 100%;
+	height: 100%;
+}
+
+.iwbe-cell-editor {
+	width: 100%;
+	height: 100%;
+	padding: 6px 10px;
+	border: 2px solid #2271b1;
+	border-radius: 0;
+	font-size: 13px;
+	font-family: inherit;
+	box-sizing: border-box;
+	outline: none;
+	background: #fff;
+}
+
+.iwbe-cell-editor:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+}
+
+.iwbe-cell-editor--invalid {
+	border-color: #d63638;
+}
+
+.iwbe-cell-editor--invalid:focus {
+	border-color: #d63638;
+	box-shadow: 0 0 0 1px #d63638;
+}
+
+.iwbe-validation-tooltip {
+	position: absolute;
+	bottom: 100%;
+	left: 0;
+	background: #d63638;
+	color: #fff;
+	padding: 4px 8px;
+	font-size: 12px;
+	border-radius: 3px;
+	white-space: nowrap;
+	z-index: 10;
+	pointer-events: none;
+}
+
 /* ── Row states ──────────────────────────────────────────── */
 
 .iwbe-row {

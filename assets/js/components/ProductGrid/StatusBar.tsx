@@ -1,5 +1,5 @@
 import { __, sprintf } from '@wordpress/i18n';
-import { useChangesStore } from '@/store';
+import { useChangesStore, useEditingStore } from '@/store';
 
 interface StatusBarProps {
 	total: number;
@@ -14,6 +14,7 @@ export function StatusBar( {
 }: StatusBarProps ): JSX.Element {
 	const changes = useChangesStore( ( state ) => state.changes );
 	const discardAll = useChangesStore( ( state ) => state.discardAll );
+	const stopEditing = useEditingStore( ( state ) => state.stopEditing );
 
 	const changedProductsCount = Object.keys( changes ).length;
 	let changedCellsCount = 0;
@@ -58,7 +59,10 @@ export function StatusBar( {
 					<button
 						type="button"
 						className="iwbe-btn-discard"
-						onClick={ discardAll }
+						onClick={ () => {
+							stopEditing();
+							discardAll();
+						} }
 					>
 						{ __( 'Discard Changes', 'ihumbak-woo-bulk-edit' ) }
 					</button>

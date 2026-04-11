@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useChangesStore } from '@/store';
+import { useChangesStore, useEditingStore } from '@/store';
 
 export function useUndoRedoShortcuts(): void {
 	useEffect( () => {
@@ -10,6 +10,12 @@ export function useUndoRedoShortcuts(): void {
 
 			const isModifier = event.metaKey || event.ctrlKey;
 			if ( ! isModifier ) {
+				return;
+			}
+
+			// Don't intercept undo/redo when inline editor is active
+			// Let the browser handle native text undo in the input
+			if ( useEditingStore.getState().activeCell !== null ) {
 				return;
 			}
 

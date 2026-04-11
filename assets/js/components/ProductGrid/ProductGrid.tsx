@@ -5,6 +5,7 @@ import { Pagination } from './Pagination';
 import { StatusBar } from './StatusBar';
 import { LoadingSkeleton } from './LoadingSkeleton';
 import { getColumnWidths } from './columnFactory';
+import { useGridKeyboardNav } from '@/hooks/useGridKeyboardNav';
 
 export function ProductGrid(): JSX.Element {
 	const {
@@ -16,7 +17,10 @@ export function ProductGrid(): JSX.Element {
 		totalItems,
 		totalPages,
 		selectedCount,
+		fields,
 	} = useProductGrid();
+
+	useGridKeyboardNav( table, fields );
 
 	if ( isLoading ) {
 		return <LoadingSkeleton />;
@@ -36,6 +40,7 @@ export function ProductGrid(): JSX.Element {
 				<VirtualizedBody
 					table={ table }
 					columnWidths={ columnWidths }
+					page={ pagination.page }
 				/>
 			</div>
 

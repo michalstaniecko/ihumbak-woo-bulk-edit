@@ -17,7 +17,7 @@ const COLUMN_WIDTHS: Record< FieldType, number > = {
 	custom_meta: 150,
 };
 
-const STATUS_LABELS: Record< string, string > = {
+export const STATUS_LABELS: Record< string, string > = {
 	publish: __( 'Published', 'ihumbak-woo-bulk-edit' ),
 	draft: __( 'Draft', 'ihumbak-woo-bulk-edit' ),
 	pending: __( 'Pending', 'ihumbak-woo-bulk-edit' ),
