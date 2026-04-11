@@ -25,7 +25,10 @@ export const FieldSchema = z.object( {
 	editable: z.boolean(),
 	sortable: z.boolean(),
 	filterable: z.boolean(),
-	options: z.record( z.string(), z.string() ),
+	options: z.union( [
+		z.record( z.string(), z.string() ),
+		z.array( z.never() ),
+	] ).transform( ( val ) => ( Array.isArray( val ) ? {} : val ) ),
 } );
 export type Field = z.infer< typeof FieldSchema >;
 

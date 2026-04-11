@@ -1,0 +1,254 @@
+/* ── Product Grid ─────────────────────────────────────────── */
+
+.iwbe-product-grid {
+	margin-top: 16px;
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+
+.iwbe-grid-header-wrapper {
+	border: 1px solid #c3c4c7;
+	border-bottom: none;
+	background: #f6f7f7;
+	overflow: hidden;
+}
+
+.iwbe-header-row {
+	display: flex;
+}
+
+.iwbe-th {
+	padding: 8px 10px;
+	text-align: left;
+	font-weight: 600;
+	font-size: 13px;
+	color: #1d2327;
+	border-bottom: 1px solid #c3c4c7;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	user-select: none;
+	box-sizing: border-box;
+}
+
+.iwbe-th-sortable {
+	cursor: pointer;
+}
+
+.iwbe-th-sortable:hover {
+	background: #dcdcde;
+}
+
+.iwbe-th-sortable::after {
+	content: "";
+	display: inline-block;
+	width: 0;
+	height: 0;
+	margin-left: 6px;
+	vertical-align: middle;
+	border-left: 4px solid transparent;
+	border-right: 4px solid transparent;
+	border-bottom: 4px solid #a7aaad;
+	opacity: 0.4;
+}
+
+.iwbe-sort-asc::after {
+	border-bottom: 4px solid #2271b1;
+	border-top: none;
+	opacity: 1;
+}
+
+.iwbe-sort-desc::after {
+	border-bottom: none;
+	border-top: 4px solid #2271b1;
+	opacity: 1;
+}
+
+.iwbe-th-select {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+}
+
+/* ── Body ────────────────────────────────────────────────── */
+
+.iwbe-grid-body-wrapper {
+	border: 1px solid #c3c4c7;
+	border-top: none;
+	background: #fff;
+}
+
+.iwbe-td {
+	padding: 6px 10px;
+	font-size: 13px;
+	color: #2c3338;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+}
+
+.iwbe-td-select {
+	justify-content: center;
+}
+
+.iwbe-grid-empty {
+	text-align: center;
+	padding: 24px 10px;
+	color: #646970;
+	font-style: italic;
+}
+
+/* ── Row states ──────────────────────────────────────────── */
+
+.iwbe-row {
+	display: flex;
+	cursor: pointer;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.iwbe-row:hover {
+	background: #f6f7f7;
+}
+
+.iwbe-row-selected {
+	background: #e5f5fa;
+}
+
+.iwbe-row-selected:hover {
+	background: #d0ecf5;
+}
+
+/* ── Footer (pagination + status bar) ────────────────────── */
+
+.iwbe-grid-footer {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	align-items: center;
+	margin-top: 8px;
+	gap: 8px;
+}
+
+/* ── Pagination ──────────────────────────────────────────── */
+
+.iwbe-pagination {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.iwbe-pagination-pages {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.iwbe-pagination-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 28px;
+	height: 28px;
+	padding: 0 6px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	background: #f6f7f7;
+	color: #2271b1;
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+	text-decoration: none;
+}
+
+.iwbe-pagination-btn:hover:not(:disabled) {
+	border-color: #2271b1;
+	background: #f0f0f1;
+}
+
+.iwbe-pagination-btn:disabled {
+	color: #a7aaad;
+	border-color: #dcdcde;
+	cursor: not-allowed;
+}
+
+.iwbe-pagination-info {
+	font-size: 13px;
+	color: #50575e;
+	padding: 0 4px;
+}
+
+.iwbe-pagination-per-page {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	font-size: 13px;
+	color: #50575e;
+}
+
+.iwbe-pagination-per-page select {
+	padding: 2px 4px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	font-size: 13px;
+}
+
+/* ── Status bar ──────────────────────────────────────────── */
+
+.iwbe-status-bar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	font-size: 13px;
+	color: #646970;
+}
+
+.iwbe-status-selected {
+	font-weight: 600;
+	color: #2271b1;
+}
+
+.iwbe-status-loading {
+	color: #a7aaad;
+	font-style: italic;
+}
+
+/* ── Loading skeleton ────────────────────────────────────── */
+
+.iwbe-skeleton {
+	margin-top: 16px;
+}
+
+.iwbe-skeleton-table {
+	border: 1px solid #c3c4c7;
+}
+
+.iwbe-skeleton-row td {
+	height: 40px;
+}
+
+.iwbe-skeleton-bar {
+	display: block;
+	height: 12px;
+	width: 60%;
+	background: #dcdcde;
+	border-radius: 3px;
+	animation: iwbe-pulse 1.5s ease-in-out infinite;
+}
+
+.iwbe-skeleton-bar-header {
+	width: 50%;
+	height: 14px;
+}
+
+@keyframes iwbe-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.4;
+	}
+}
