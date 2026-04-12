@@ -40,6 +40,7 @@ export function ProductGrid(): JSX.Element {
 	const columnWidths = getColumnWidths(
 		table.getAllColumns().map( ( c ) => c.columnDef )
 	);
+	const totalWidth = columnWidths.reduce( ( sum, w ) => sum + w, 0 );
 
 	return (
 		<div className="iwbe-product-grid">
@@ -53,16 +54,26 @@ export function ProductGrid(): JSX.Element {
 				onClearAll={ onClearAllFilters }
 			/>
 
-			<div className="iwbe-grid-header-wrapper">
-				<HeaderRow table={ table } columnWidths={ columnWidths } />
-			</div>
+			<div className="iwbe-grid-scroll-container">
+				<div
+					className="iwbe-grid-inner"
+					style={ { width: totalWidth } }
+				>
+					<div className="iwbe-grid-header-wrapper">
+						<HeaderRow
+							table={ table }
+							columnWidths={ columnWidths }
+						/>
+					</div>
 
-			<div className="iwbe-grid-body-wrapper">
-				<VirtualizedBody
-					table={ table }
-					columnWidths={ columnWidths }
-					page={ pagination.page }
-				/>
+					<div className="iwbe-grid-body-wrapper">
+						<VirtualizedBody
+							table={ table }
+							columnWidths={ columnWidths }
+							page={ pagination.page }
+						/>
+					</div>
+				</div>
 			</div>
 
 			<div className="iwbe-grid-footer">
