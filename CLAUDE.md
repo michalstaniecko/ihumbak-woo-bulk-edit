@@ -11,7 +11,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 
 ## Implementation Status
 
-**Overall progress: ~55% — Backend MVP complete, frontend grid with filtering/pagination/sorting/selection/inline editing working.**
+**Overall progress: ~65% — Backend MVP + persistence layer complete; frontend grid with inline editing, batch save, and horizontally-scrolling virtualized table working.**
 
 ### Done (Backend MVP)
 - Plugin bootstrap with HPOS compatibility declaration
@@ -20,21 +20,22 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - REST API:
   - `GET /fields` — fully working, returns all registered fields with metadata
   - `POST /products/query` — fully working, filters/sorts/paginates via native SQL
-  - `PUT /products/batch` — registered, stub (awaits BatchSaver, Issue #12)
+  - `PUT /products/batch` — fully working (BatchSaver + ProductSaver)
   - `DELETE /products/batch` — registered, stub (awaits BulkDelete, Issue #23)
 - Field system: FieldInterface, AbstractField, FieldType enum (11 types), FieldRegistry
-- 6 core fields: name, sku, regular_price, sale_price, stock_quantity, status
+- **35 core fields** covering all WC product attributes (Issue #14): name, sku, slug, status, regular_price, sale_price, stock_quantity, manage_stock, backorders, sold_individually, weight, length, width, height, shipping_class, categories, tags, description, short_description, featured, catalog_visibility, reviews_allowed, menu_order, purchase_note, virtual, downloadable, download_limit, download_expiry, external_url, button_text, upsells, cross_sells, thumbnail, gallery, date_created
 - Query system: QueryBuilder (native SQL with dynamic LEFT JOINs), FilterParser, OperatorRegistry
 - 6 operators: `=`, `!=`, `LIKE`, `NOT LIKE`, `IS EMPTY`, `IS NOT EMPTY`
 - Security: CapabilityChecker (read/write/delete/manage), RateLimiter (transient-based, 10 req/60s/user)
+- Persistence: `ProductSaver` (per-product save via WC CRUD), `BatchSaver` (orchestrator with optimistic locking, `wp_defer_term_counting`, transient invalidation)
 - uninstall.php (drops tables, deletes options and transients)
 
 ### Done (Frontend Foundation)
-- Build pipeline: `@wordpress/scripts` (webpack), TypeScript strict mode, `@/*` path aliases
+- Build pipeline: `@wordpress/scripts` v30 (webpack), TypeScript strict mode, `@/*` path aliases
 - React 18 app skeleton with `QueryClientProvider` (`assets/js/app.tsx`)
 - REST API client: typed `apiFetch` wrapper with `ApiError` class (`assets/js/api/client.ts`)
-- Endpoint functions: `fetchProducts`, `fetchFields` (`assets/js/api/`)
-- React Query hooks: `useProducts` (with `keepPreviousData`), `useFields` (`assets/js/hooks/`)
+- Endpoint functions: `fetchProducts`, `fetchFields`, `batchSaveProducts` (`assets/js/api/`)
+- React Query hooks: `useProducts` (with `keepPreviousData`), `useFields`, `useBatchSave`
 - Zod validation schemas for all API response types (`assets/js/types/api.ts`)
 - Global type declarations for `iwbeData` window object (`assets/js/types/global.d.ts`)
 - Build output: `assets/build/app.js`, `app.css`, `app.asset.php`
@@ -48,27 +49,37 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - StatusBar: total products count, selected count, background fetch indicator
 - LoadingSkeleton: animated placeholder during initial data fetch
 - CSS styling matching WooCommerce admin aesthetics (`assets/css/product-grid.css`)
+- **Horizontal scroll sync**: header and body wrapped in a single `.iwbe-grid-scroll-container` with an inner fixed-width div (sum of column widths) so header + rows scroll together
 
 ### Done (Frontend Editing & Filtering — Issues #10, #11, #12, #13)
-- Zustand stores: useChangesStore (change tracking, undo/redo with 50-step history), useEditingStore (active cell, draft value, validation)
-- Inline cell editing with change highlighting (TextEditor, NumberEditor, SelectEditor)
+- Zustand stores: `useChangesStore` (change tracking, undo/redo with 50-step history), `useEditingStore` (active cell, draft value, validation)
+- Inline cell editing with change highlighting, dedicated editors (`editors/TextEditor.tsx`, `NumberEditor.tsx`, `SelectEditor.tsx`) and shared `CellEditorProps`
+- Cell-level validation via `validation.ts` (per-field `validate()` + pending-changes context)
 - Batch save endpoint with progress bar, retry, and optimistic locking
 - Filter toolbar with quick search (name LIKE, debounced 300ms), multi-step "Add Filter" dropdown (field → operator → value)
 - Filter chips with remove buttons, "Clear all" to reset search + filters
 - All 6 operators in UI: equals, not equals, contains, not contains, is empty, is not empty
 - Filters combined by AND, auto-reload grid on change
-- Keyboard navigation (useGridKeyboardNav), undo/redo shortcuts (useUndoRedoShortcuts)
-- useBatchSave hook for batch save operations
+- Keyboard navigation (`useGridKeyboardNav`), undo/redo shortcuts (`useUndoRedoShortcuts`)
+
+### Done (Tests — partial)
+- PHPUnit scaffolding with Unit + Integration suites
+- Unit tests: `ContainerTest`, `FieldRegistryTest`, `FieldTypeTest`, all 6 core field tests (Name/Sku/RegularPrice/SalePrice/StockQuantity/Status), `QueryBuilderTest`, all 6 operator tests
+- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`
+- Frontend: Vitest configured; `useChangesStore.test.ts` (Zustand store coverage)
+- E2E: directory exists, no Playwright tests yet
 
 ### Not Yet Implemented
-- Persistence layer: ProductSaver, ChangeLog
+- Change log persistence (audit log table + writer) — Issue #24
 - Database migrations (table creation on activation) — Issue #25
-- Operations: SetValue, SearchReplace, MathOperation
-- Filters CRUD endpoints (`GET|POST|PUT|DELETE /filters`)
-- Export/Import endpoints
-- Bulk operation endpoint (`POST /products/bulk-operation`)
-- Integration modules (WPML, Yoast, ACF, etc.)
-- Tests (directory structure exists, no test files)
+- Operations: SetValue, SearchReplace, MathOperation — Issues #16, #17, #31
+- Filters CRUD endpoints (`GET|POST|PUT|DELETE /filters`) — Issue #18
+- Export/Import endpoints — Issue #22
+- Bulk operation endpoint (`POST /products/bulk-operation`) — Issue #16
+- Extended operators + AND/OR logic — Issue #19
+- Variants inline editing — Issue #15
+- Integration modules (WPML, Yoast, ACF, etc.) — Issues #21, #26, #27
+- E2E / Playwright tests — Issue #29
 - GPL v2+ license headers in source files
 
 ## Target Environment
@@ -108,7 +119,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - **@wordpress/scripts over Vite** — chose wp-scripts for seamless WP integration, automatic dependency extraction via `app.asset.php`
 - **Zod for API response validation** — runtime type safety at the client-server boundary, schemas mirror backend response shapes
 - **Div-based grid layout** — ProductGrid uses flex `<div>` elements instead of `<table>` for compatibility with react-window v2 (which renders `<div>` containers); column widths enforced via inline styles
-- **Two-section grid** — separate header wrapper and scrollable body wrapper, both sharing the same column widths from `getColumnWidths()`
+- **Shared scroll container for header + body** — both are wrapped in `.iwbe-grid-scroll-container` (`overflow-x: auto`) with an inner `.iwbe-grid-inner` div whose `width = sum(columnWidths)`. Scrolling the container moves header and virtualized rows together; react-window `<List>` handles vertical virtualization only and fills the inner div's full width. This avoids the need for scroll-event synchronization between two separate containers.
 - **PHP empty array caveat** — PHP `json_encode([])` returns `[]` not `{}`, so Zod `FieldSchema.options` uses `z.union([z.record(), z.array(z.never())]).transform()` to handle both formats
 
 ## Directory Structure
@@ -118,6 +129,7 @@ ihumbak-woo-bulk-edit/
 ├── ihumbak-woo-bulk-edit.php     # Bootstrap, plugin header, autoload
 ├── uninstall.php                 # Cleanup on uninstall
 ├── composer.json
+├── package.json                  # Frontend dependencies (React, TanStack, Zustand, Zod, Vitest)
 ├── tsconfig.json                 # TypeScript strict config, path aliases
 ├── webpack.config.js             # Extends wp-scripts, custom entry & alias
 ├── src/                          # PHP (PSR-4: IhumbakWooBulkEdit\)
@@ -148,47 +160,64 @@ ihumbak-woo-bulk-edit/
 │   │   ├── AbstractField.php     # Base implementation with defaults
 │   │   ├── FieldType.php         # Enum with 11 field types
 │   │   ├── FieldRegistry.php     # Central registry, filter by capability
-│   │   └── Core/
-│   │       ├── NameField.php
-│   │       ├── SkuField.php
-│   │       ├── RegularPriceField.php
-│   │       ├── SalePriceField.php
-│   │       ├── StockQuantityField.php
-│   │       └── StatusField.php
+│   │   ├── Core/                 # 35 core WC product fields (Issue #14)
+│   │   │   ├── NameField.php, SkuField.php, SlugField.php, StatusField.php
+│   │   │   ├── RegularPriceField.php, SalePriceField.php
+│   │   │   ├── StockQuantityField.php, ManageStockField.php, BackordersField.php, SoldIndividuallyField.php
+│   │   │   ├── WeightField.php, LengthField.php, WidthField.php, HeightField.php, ShippingClassField.php
+│   │   │   ├── CategoriesField.php, TagsField.php
+│   │   │   ├── DescriptionField.php, ShortDescriptionField.php, PurchaseNoteField.php
+│   │   │   ├── FeaturedField.php, CatalogVisibilityField.php, ReviewsAllowedField.php, MenuOrderField.php
+│   │   │   ├── VirtualField.php, DownloadableField.php, DownloadLimitField.php, DownloadExpiryField.php
+│   │   │   ├── ExternalUrlField.php, ButtonTextField.php
+│   │   │   ├── UpsellsField.php, CrossSellsField.php
+│   │   │   ├── ThumbnailField.php, GalleryField.php
+│   │   │   └── DateCreatedField.php
 │   │   └── Custom/               # (empty — prepared for custom meta fields)
 │   ├── Operations/               # (empty — planned)
-│   ├── Persistence/              # (empty — planned)
+│   ├── Persistence/
+│   │   ├── ProductSaver.php      # Per-product save via WC CRUD with validation
+│   │   └── BatchSaver.php        # Batch orchestrator, optimistic locking, transient cleanup
 │   ├── Integrations/             # (empty — planned)
 │   ├── Security/
 │   │   ├── CapabilityChecker.php # read/write/delete/manage checks
 │   │   └── RateLimiter.php       # Transient-based rate limiting
 │   └── Support/                  # (empty — planned)
 ├── assets/
-│   ├── package.json              # Frontend dependencies (React, TanStack, Zustand, Zod)
 │   ├── js/
 │   │   ├── app.tsx               # React root, QueryClientProvider
 │   │   ├── components/
 │   │   │   ├── App.tsx           # Main app component, mounts ProductGrid
 │   │   │   └── ProductGrid/
-│   │   │       ├── ProductGrid.tsx     # Main grid container
-│   │   │       ├── useProductGrid.ts   # Central hook (table, sort, pagination, selection)
-│   │   │       ├── columnFactory.ts    # Field[] → ColumnDef[] mapping
-│   │   │       ├── VirtualizedBody.tsx # react-window List integration
-│   │   │       ├── HeaderRow.tsx       # Header with sort indicators
-│   │   │       ├── GridRow.tsx         # Single row with cells
-│   │   │       ├── Pagination.tsx      # Page controls + per-page select
-│   │   │       ├── StatusBar.tsx       # Total/selected count
-│   │   │       ├── FilterToolbar.tsx    # Filter toolbar with search, add filter, chips
-│   │   │       ├── LoadingSkeleton.tsx  # Animated skeleton loader
-│   │   │       └── index.ts           # Barrel export
+│   │   │       ├── ProductGrid.tsx       # Main grid container, scroll-container wrapper
+│   │   │       ├── useProductGrid.ts     # Central hook (table, sort, pagination, selection, filters)
+│   │   │       ├── columnFactory.ts      # Field[] → ColumnDef[] mapping
+│   │   │       ├── VirtualizedBody.tsx   # react-window List integration
+│   │   │       ├── HeaderRow.tsx         # Header with sort indicators
+│   │   │       ├── GridRow.tsx           # Single row with cells + editor mounting
+│   │   │       ├── Pagination.tsx        # Page controls + per-page select
+│   │   │       ├── StatusBar.tsx         # Total/selected count, save progress
+│   │   │       ├── FilterToolbar.tsx     # Search, add-filter dropdown, chips
+│   │   │       ├── LoadingSkeleton.tsx   # Animated skeleton loader
+│   │   │       ├── validation.ts         # Cell-level validation with pending changes
+│   │   │       ├── editors/
+│   │   │       │   ├── CellEditorProps.ts  # Shared editor prop contract
+│   │   │       │   ├── TextEditor.tsx      # Text/textarea editor
+│   │   │       │   ├── NumberEditor.tsx    # Number/price editor
+│   │   │       │   ├── SelectEditor.tsx    # Select/boolean editor
+│   │   │       │   └── index.ts            # getEditorForField factory
+│   │   │       └── index.ts              # Barrel export
 │   │   ├── api/
 │   │   │   ├── client.ts         # apiFetch wrapper, ApiError class
-│   │   │   ├── products.ts       # fetchProducts function
+│   │   │   ├── products.ts       # fetchProducts, batchSaveProducts
 │   │   │   ├── fields.ts         # fetchFields function
 │   │   │   └── index.ts          # Barrel export
 │   │   ├── hooks/
-│   │   │   ├── useProducts.ts    # React Query hook (keepPreviousData)
-│   │   │   ├── useFields.ts      # React Query hook
+│   │   │   ├── useProducts.ts           # React Query hook (keepPreviousData)
+│   │   │   ├── useFields.ts             # React Query hook
+│   │   │   ├── useBatchSave.ts          # Batch save orchestration with progress
+│   │   │   ├── useGridKeyboardNav.ts    # Arrow keys + Enter navigation
+│   │   │   ├── useUndoRedoShortcuts.ts  # Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z
 │   │   │   └── index.ts          # Barrel export
 │   │   ├── types/
 │   │   │   ├── api.ts            # Zod schemas for Field, Product, Filter, etc.
@@ -197,14 +226,16 @@ ihumbak-woo-bulk-edit/
 │   │   └── store/
 │   │       ├── useChangesStore.ts  # Change tracking with undo/redo
 │   │       ├── useEditingStore.ts  # Cell editing UI state
+│   │       ├── __tests__/
+│   │       │   └── useChangesStore.test.ts  # Vitest store coverage
 │   │       └── index.ts           # Barrel export
 │   ├── css/
 │   │   └── product-grid.css      # Grid styles (WC admin aesthetic)
 │   └── build/                    # Compiled output (app.js, app.asset.php)
 ├── tests/
-│   ├── Unit/                     # (empty — planned)
-│   ├── Integration/              # (empty — planned)
-│   └── e2e/                      # (empty — Playwright planned)
+│   ├── Unit/                     # PHPUnit unit tests (Container, Fields, Query, Operators)
+│   ├── Integration/              # PHPUnit integration tests (Plugin, Api, Query, Security)
+│   └── e2e/                      # (empty — Playwright planned, Issue #29)
 ├── docs/
 │   └── specyfikacja-bulk-edit-woocommerce.md
 └── languages/
@@ -245,13 +276,13 @@ Endpoints and status:
 |--------|----------|--------|
 | `GET` | `/fields` | Implemented |
 | `POST` | `/products/query` | Implemented |
-| `PUT` | `/products/batch` | Implemented |
+| `PUT` | `/products/batch` | Implemented (BatchSaver + ProductSaver, optimistic locking) |
 | `DELETE` | `/products/batch` | Stub (Issue #23) |
-| `POST` | `/products/bulk-operation` | Planned |
-| `GET\|POST\|PUT\|DELETE` | `/filters` | Planned |
-| `POST` | `/export` | Planned |
-| `POST` | `/import` | Planned |
-| `GET` | `/import/status/{id}` | Planned |
+| `POST` | `/products/bulk-operation` | Planned (Issue #16) |
+| `GET\|POST\|PUT\|DELETE` | `/filters` | Planned (Issue #18) |
+| `POST` | `/export` | Planned (Issue #22) |
+| `POST` | `/import` | Planned (Issue #22) |
+| `GET` | `/import/status/{id}` | Planned (Issue #22) |
 
 Query endpoint accepts: `filters` (array of `{field, operator, value}`), `sort` (`{field, order}`), `page` (min 1), `per_page` (10-500).
 
@@ -276,20 +307,23 @@ Error format: `{ "code": "wbm_*", "message": "...", "data": { "status": 4xx, ...
 
 ## Testing
 
-- PHPUnit for unit tests (Operations, FieldRegistry, QueryBuilder) — target 80%+ coverage
-- wp-phpunit for integration tests
-- Playwright for e2e tests
-- Performance benchmarks with 100k product seed
+- PHPUnit Unit suite — Container, FieldRegistry, FieldType, core fields, QueryBuilder, operators (in place)
+- PHPUnit Integration suite (wp-phpunit) — Plugin bootstrap, FieldsController, ProductsController, FilterParser, QueryBuilder, Like/NotLike operators, CapabilityChecker, RateLimiter (in place)
+- Vitest for frontend unit tests — currently `useChangesStore.test.ts`; expand to editors, validation, columnFactory
+- Playwright for e2e tests — planned (Issue #29)
+- Performance benchmarks with 100k product seed — planned
+- Target 80%+ coverage for Operations, FieldRegistry, QueryBuilder
 
 ## Build & Dev Commands
 
 ```bash
 composer install          # PHP dependencies
-cd assets && npm install  # JS dependencies (run from assets/)
-cd assets && npm run start  # Dev server with HMR
-cd assets && npm run build  # Production build
+npm install               # JS dependencies (run from repo root)
+npm run start             # Dev server with HMR (wp-scripts)
+npm run build             # Production build
+npm test                  # Vitest (frontend)
 composer test             # PHPUnit
-npx playwright test       # E2E tests
+npx playwright test       # E2E tests (once added)
 ```
 
 ## i18n
@@ -312,4 +346,7 @@ Priority order:
 ## Known TODOs (from code)
 
 - **Issue #23** — Implement `BulkDelete` for `DELETE /products/batch`
+- **Issue #24** — Audit log writer wired into `BatchSaver` (blocked by #25)
 - **Issue #25** — `DatabaseMigrator` for table creation on plugin activation
+- **Issue #16** — `/products/bulk-operation` endpoint + SetValue operation + UI modal
+- **Issue #17** — `SearchReplace` operation with regex support
