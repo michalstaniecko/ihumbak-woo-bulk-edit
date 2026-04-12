@@ -61,7 +61,13 @@ final class ProductSaver
      * @param array<string, mixed>   $changes      Field key => new value.
      * @param string                 $postModified The post_modified timestamp from when the product was loaded.
      *
-     * @return array{status: 'success'|'error', id: int, message?: string}
+     * @return array{
+     *     status: 'success'|'error',
+     *     id: int,
+     *     message?: string,
+     *     code?: string,
+     *     changes?: array<string, array{old: mixed, new: mixed}>
+     * }
      */
     public function save(int $productId, array $changes, string $postModified): array
     {
@@ -143,9 +149,24 @@ final class ProductSaver
             $sanitized[$fieldKey] = $value;
         }
 
-        // Apply all changes.
+        // Capture old values (for audit log) and apply all changes.
+        $diff = [];
+
         foreach ($sanitized as $fieldKey => $value) {
             $setter = self::FIELD_SETTERS[$fieldKey];
+            $getter = 'get_' . substr($setter, 4);
+
+            $oldValue = method_exists($product, $getter)
+                ? $product->$getter('edit')
+                : null;
+
+            if (! $this->valuesEqual($oldValue, $value)) {
+                $diff[$fieldKey] = [
+                    'old' => $oldValue,
+                    'new' => $value,
+                ];
+            }
+
             $product->$setter($value);
         }
 
@@ -160,8 +181,23 @@ final class ProductSaver
         }
 
         return [
-            'status' => 'success',
-            'id'     => $productId,
+            'status'  => 'success',
+            'id'      => $productId,
+            'changes' => $diff,
         ];
+    }
+
+    /**
+     * Loose equality check that normalises scalar/numeric comparisons so that
+     * e.g. "10.00" and 10 are treated as equal (they survive the WC setters
+     * round-trip identically).
+     */
+    private function valuesEqual(mixed $a, mixed $b): bool
+    {
+        if (is_scalar($a) && is_scalar($b)) {
+            return (string) $a === (string) $b;
+        }
+
+        return wp_json_encode($a) === wp_json_encode($b);
     }
 }

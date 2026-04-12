@@ -20,6 +20,7 @@ final class BatchSaver
 
     public function __construct(
         private readonly ProductSaver $productSaver,
+        private readonly ChangeLogRepository $changeLog,
     ) {}
 
     /**
@@ -50,6 +51,7 @@ final class BatchSaver
         $results = [];
         $successCount = 0;
         $errorCount = 0;
+        $logEntries = [];
 
         wp_defer_term_counting(true);
 
@@ -65,18 +67,34 @@ final class BatchSaver
                         $postModified
                     );
 
-                    $results[] = $result;
-
                     if ($result['status'] === 'success') {
                         $successCount++;
+
+                        foreach ($result['changes'] ?? [] as $fieldKey => $diff) {
+                            $logEntries[] = [
+                                'product_id' => $productId,
+                                'field'      => $fieldKey,
+                                'old_value'  => $diff['old'],
+                                'new_value'  => $diff['new'],
+                            ];
+                        }
+
+                        // Drop internal diff from the client-facing result.
+                        unset($result['changes']);
                     } else {
                         $errorCount++;
                     }
+
+                    $results[] = $result;
                 }
             }
         } finally {
             wp_defer_term_counting(false);
             wc_delete_product_transients();
+
+            if ($logEntries !== []) {
+                $this->changeLog->logBatch($logEntries);
+            }
         }
 
         return [

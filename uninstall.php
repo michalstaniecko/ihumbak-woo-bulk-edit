@@ -17,8 +17,12 @@ global $wpdb;
 $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}wbm_saved_filters");
 $wpdb->query("DROP TABLE IF EXISTS {$wpdb->prefix}wbm_change_log");
 
+// Clear scheduled cron events.
+wp_clear_scheduled_hook('wbm_changelog_rotation');
+
 // Delete options.
 delete_option('wbm_db_version');
+delete_option('wbm_changelog_retention_days');
 delete_option('iwbe_settings');
 
 // Delete transients.

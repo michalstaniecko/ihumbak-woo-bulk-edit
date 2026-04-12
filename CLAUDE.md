@@ -11,7 +11,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 
 ## Implementation Status
 
-**Overall progress: ~65% — Backend MVP + persistence layer complete; frontend grid with inline editing, batch save, and horizontally-scrolling virtualized table working.**
+**Overall progress: ~72% — Backend MVP + persistence + audit log complete; frontend grid with inline editing, batch save, and horizontally-scrolling virtualized table working; change history drawer wired into toolbar.**
 
 ### Done (Backend MVP)
 - Plugin bootstrap with HPOS compatibility declaration
@@ -20,15 +20,17 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - REST API:
   - `GET /fields` — fully working, returns all registered fields with metadata
   - `POST /products/query` — fully working, filters/sorts/paginates via native SQL
-  - `PUT /products/batch` — fully working (BatchSaver + ProductSaver)
+  - `PUT /products/batch` — fully working (BatchSaver + ProductSaver, writes audit log)
   - `DELETE /products/batch` — registered, stub (awaits BulkDelete, Issue #23)
+  - `GET /changelog` — fully working (filters: product_id, user_id, field, date_from, date_to; pagination)
 - Field system: FieldInterface, AbstractField, FieldType enum (11 types), FieldRegistry
 - **35 core fields** covering all WC product attributes (Issue #14): name, sku, slug, status, regular_price, sale_price, stock_quantity, manage_stock, backorders, sold_individually, weight, length, width, height, shipping_class, categories, tags, description, short_description, featured, catalog_visibility, reviews_allowed, menu_order, purchase_note, virtual, downloadable, download_limit, download_expiry, external_url, button_text, upsells, cross_sells, thumbnail, gallery, date_created
 - Query system: QueryBuilder (native SQL with dynamic LEFT JOINs), FilterParser, OperatorRegistry
 - 6 operators: `=`, `!=`, `LIKE`, `NOT LIKE`, `IS EMPTY`, `IS NOT EMPTY`
 - Security: CapabilityChecker (read/write/delete/manage), RateLimiter (transient-based, 10 req/60s/user)
-- Persistence: `ProductSaver` (per-product save via WC CRUD), `BatchSaver` (orchestrator with optimistic locking, `wp_defer_term_counting`, transient invalidation)
-- uninstall.php (drops tables, deletes options and transients)
+- Persistence: `ProductSaver` (per-product save via WC CRUD, captures pre-change values via `get_*` getters for diff), `BatchSaver` (orchestrator with optimistic locking, `wp_defer_term_counting`, transient invalidation, forwards diff to audit log)
+- **Audit log (Issue #24)**: `DatabaseMigrator` (versioned `dbDelta`, `wbm_db_version` option), `ChangeLogRepository` (insert/logBatch/query/purgeOlderThan — JSON-encoded old/new values), `ChangelogController` (REST read endpoint), daily WP-Cron `wbm_changelog_rotation` purging entries older than `wbm_changelog_retention_days` (default 90). Tables `wbm_saved_filters` and `wbm_change_log` created on activation and via `maybeMigrate()` on every boot.
+- uninstall.php (drops tables, deletes options, clears rotation cron)
 
 ### Done (Frontend Foundation)
 - Build pipeline: `@wordpress/scripts` v30 (webpack), TypeScript strict mode, `@/*` path aliases
@@ -62,16 +64,20 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - Filters combined by AND, auto-reload grid on change
 - Keyboard navigation (`useGridKeyboardNav`), undo/redo shortcuts (`useUndoRedoShortcuts`)
 
+### Done (Frontend Change History — Issue #24)
+- `api/changelog.ts` + `useChangelog` React Query hook, Zod-validated response
+- `ChangeHistoryPanel` drawer component (overlay + backdrop) triggered from toolbar button in `App.tsx`
+- Filter UI: product_id, user_id, field (select from registry), date_from, date_to, pagination
+- Old value in red, new value in green, clickable product links into wp-admin edit screen
+
 ### Done (Tests — partial)
 - PHPUnit scaffolding with Unit + Integration suites
 - Unit tests: `ContainerTest`, `FieldRegistryTest`, `FieldTypeTest`, all 6 core field tests (Name/Sku/RegularPrice/SalePrice/StockQuantity/Status), `QueryBuilderTest`, all 6 operator tests
-- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`
+- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`, `DatabaseMigratorTest`, `ChangeLogRepositoryTest`, `ChangelogControllerTest`
 - Frontend: Vitest configured; `useChangesStore.test.ts` (Zustand store coverage)
 - E2E: directory exists, no Playwright tests yet
 
 ### Not Yet Implemented
-- Change log persistence (audit log table + writer) — Issue #24
-- Database migrations (table creation on activation) — Issue #25
 - Operations: SetValue, SearchReplace, MathOperation — Issues #16, #17, #31
 - Filters CRUD endpoints (`GET|POST|PUT|DELETE /filters`) — Issue #18
 - Export/Import endpoints — Issue #22
@@ -243,10 +249,10 @@ ihumbak-woo-bulk-edit/
 
 ## Custom Database Tables
 
-- `{prefix}_wbm_saved_filters` — user saved filters (JSON)
-- `{prefix}_wbm_change_log` — audit log (product_id, field, old_value, new_value)
+- `{prefix}wbm_saved_filters` — user saved filters (id, user_id, name, definition JSON, is_shared, timestamps)
+- `{prefix}wbm_change_log` — audit log (id, user_id, product_id, field, old_value JSON, new_value JSON, changed_at)
 
-Note: Tables defined in uninstall.php cleanup but migration/creation not yet implemented (Issue #25).
+Created via `Persistence\DatabaseMigrator` (`dbDelta`) on activation and on every boot when `wbm_db_version` differs from `DatabaseMigrator::SCHEMA_VERSION`. `uninstall.php` drops both tables, deletes `wbm_db_version` / `wbm_changelog_retention_days`, and clears the rotation cron.
 
 ## Coding Conventions
 
@@ -276,8 +282,9 @@ Endpoints and status:
 |--------|----------|--------|
 | `GET` | `/fields` | Implemented |
 | `POST` | `/products/query` | Implemented |
-| `PUT` | `/products/batch` | Implemented (BatchSaver + ProductSaver, optimistic locking) |
+| `PUT` | `/products/batch` | Implemented (BatchSaver + ProductSaver, optimistic locking, writes audit log) |
 | `DELETE` | `/products/batch` | Stub (Issue #23) |
+| `GET` | `/changelog` | Implemented (filters, pagination) |
 | `POST` | `/products/bulk-operation` | Planned (Issue #16) |
 | `GET\|POST\|PUT\|DELETE` | `/filters` | Planned (Issue #18) |
 | `POST` | `/export` | Planned (Issue #22) |
@@ -346,7 +353,5 @@ Priority order:
 ## Known TODOs (from code)
 
 - **Issue #23** — Implement `BulkDelete` for `DELETE /products/batch`
-- **Issue #24** — Audit log writer wired into `BatchSaver` (blocked by #25)
-- **Issue #25** — `DatabaseMigrator` for table creation on plugin activation
 - **Issue #16** — `/products/bulk-operation` endpoint + SetValue operation + UI modal
 - **Issue #17** — `SearchReplace` operation with regex support

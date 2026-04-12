@@ -159,6 +159,39 @@ export const BatchSaveResponseSchema = z.object( {
 } );
 export type BatchSaveResponse = z.infer< typeof BatchSaveResponseSchema >;
 
+// ── Changelog ────────────────────────────────────────────────
+export const ChangelogEntrySchema = z.object( {
+	id: z.number(),
+	user_id: z.number(),
+	user_name: z.string(),
+	product_id: z.number(),
+	product_name: z.string(),
+	field: z.string(),
+	old_value: z.unknown(),
+	new_value: z.unknown(),
+	changed_at: z.string(),
+} );
+export type ChangelogEntry = z.infer< typeof ChangelogEntrySchema >;
+
+export const ChangelogResponseSchema = z.object( {
+	items: z.array( ChangelogEntrySchema ),
+	total: z.number(),
+	page: z.number(),
+	per_page: z.number(),
+	pages: z.number(),
+} );
+export type ChangelogResponse = z.infer< typeof ChangelogResponseSchema >;
+
+export interface ChangelogQueryParams {
+	page?: number;
+	per_page?: number;
+	product_id?: number;
+	user_id?: number;
+	field?: string;
+	date_from?: string;
+	date_to?: string;
+}
+
 // ── API Error ────────────────────────────────────────────────
 export const ApiErrorDataSchema = z
 	.object( {
