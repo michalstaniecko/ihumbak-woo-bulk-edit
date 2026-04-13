@@ -7,6 +7,8 @@ namespace IhumbakWooBulkEdit\Api;
 use IhumbakWooBulkEdit\Query\QueryBuilder;
 use IhumbakWooBulkEdit\Query\FilterParser;
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
+use IhumbakWooBulkEdit\Operations\BulkDelete;
+use IhumbakWooBulkEdit\Operations\BulkDuplicate;
 use IhumbakWooBulkEdit\Persistence\BatchSaver;
 use IhumbakWooBulkEdit\Security\CapabilityChecker;
 use IhumbakWooBulkEdit\Security\RateLimiter;
@@ -27,6 +29,8 @@ final class ProductsController extends RestController
         private readonly CapabilityChecker $capabilityChecker,
         private readonly RateLimiter $rateLimiter,
         private readonly BatchSaver $batchSaver,
+        private readonly BulkDelete $bulkDelete,
+        private readonly BulkDuplicate $bulkDuplicate,
     ) {}
 
     public function register_routes(): void
@@ -54,6 +58,16 @@ final class ProductsController extends RestController
                 'methods'             => WP_REST_Server::DELETABLE,
                 'callback'            => [$this, 'batch_delete'],
                 'permission_callback' => [$this->capabilityChecker, 'permissionDelete'],
+                'args'                => $this->getBatchDeleteArgs(),
+            ],
+        ]);
+
+        register_rest_route($this->getNamespace(), '/' . $this->rest_base . '/duplicate', [
+            [
+                'methods'             => WP_REST_Server::CREATABLE,
+                'callback'            => [$this, 'batch_duplicate'],
+                'permission_callback' => [$this->capabilityChecker, 'permissionWrite'],
+                'args'                => $this->getBatchDuplicateArgs(),
             ],
         ]);
     }
@@ -148,19 +162,29 @@ final class ProductsController extends RestController
     }
 
     /**
-     * DELETE /products/batch — bulk delete.
+     * DELETE /products/batch — bulk delete products (trash or permanent).
      */
     public function batch_delete(WP_REST_Request $request): WP_REST_Response|WP_Error
     {
-        $rateLimitCheck = $this->rateLimiter->check('batch');
+        $rateLimitCheck = $this->rateLimiter->check('batch_delete');
 
         if ($rateLimitCheck instanceof WP_Error) {
             return $rateLimitCheck;
         }
 
-        $ids = $request->get_param('ids');
+        $mode = (string) ($request->get_param('mode') ?? BulkDelete::MODE_TRASH);
 
-        if (! is_array($ids) || empty($ids)) {
+        if (! in_array($mode, [BulkDelete::MODE_TRASH, BulkDelete::MODE_PERMANENT], true)) {
+            return $this->error(
+                'wbm_invalid_mode',
+                __('Invalid delete mode. Expected "trash" or "permanent".', 'ihumbak-woo-bulk-edit'),
+                400
+            );
+        }
+
+        $rawIds = $request->get_param('ids');
+
+        if (! is_array($rawIds)) {
             return $this->error(
                 'wbm_invalid_ids',
                 __('No product IDs provided.', 'ihumbak-woo-bulk-edit'),
@@ -168,11 +192,76 @@ final class ProductsController extends RestController
             );
         }
 
-        // BulkDelete will be implemented in Issue #23.
-        return $this->success([
-            'message' => 'Batch delete endpoint ready — BulkDelete pending implementation.',
-            'count'   => count($ids),
-        ]);
+        $ids = array_values(array_unique(array_map('intval', $rawIds)));
+        $ids = array_values(array_filter($ids, static fn (int $id): bool => $id > 0));
+
+        if ($ids === []) {
+            return $this->error(
+                'wbm_invalid_ids',
+                __('No valid product IDs provided.', 'ihumbak-woo-bulk-edit'),
+                400
+            );
+        }
+
+        if (count($ids) > 500) {
+            return $this->error(
+                'wbm_too_many_ids',
+                __('Too many product IDs in a single request (maximum 500).', 'ihumbak-woo-bulk-edit'),
+                400
+            );
+        }
+
+        $result = $this->bulkDelete->process($ids, $mode);
+
+        return $this->success($result);
+    }
+
+    /**
+     * POST /products/duplicate — bulk-duplicate products as drafts.
+     */
+    public function batch_duplicate(WP_REST_Request $request): WP_REST_Response|WP_Error
+    {
+        $rateLimitCheck = $this->rateLimiter->check('batch_duplicate');
+
+        if ($rateLimitCheck instanceof WP_Error) {
+            return $rateLimitCheck;
+        }
+
+        $rawIds = $request->get_param('ids');
+
+        if (! is_array($rawIds)) {
+            return $this->error(
+                'wbm_invalid_ids',
+                __('No product IDs provided.', 'ihumbak-woo-bulk-edit'),
+                400
+            );
+        }
+
+        $ids = array_values(array_unique(array_map('intval', $rawIds)));
+        $ids = array_values(array_filter($ids, static fn (int $id): bool => $id > 0));
+
+        if ($ids === []) {
+            return $this->error(
+                'wbm_invalid_ids',
+                __('No valid product IDs provided.', 'ihumbak-woo-bulk-edit'),
+                400
+            );
+        }
+
+        if (count($ids) > 100) {
+            return $this->error(
+                'wbm_too_many_ids',
+                __('Too many product IDs in a single request (maximum 100).', 'ihumbak-woo-bulk-edit'),
+                400
+            );
+        }
+
+        $copyMeta   = (bool) ($request->get_param('copy_meta') ?? true);
+        $copyImages = (bool) ($request->get_param('copy_images') ?? true);
+
+        $result = $this->bulkDuplicate->process($ids, $copyMeta, $copyImages);
+
+        return $this->success($result);
     }
 
     private function getBatchSaveArgs(): array
@@ -190,6 +279,47 @@ final class ProductsController extends RestController
                 'default' => 50,
                 'minimum' => 10,
                 'maximum' => 500,
+            ],
+        ];
+    }
+
+    private function getBatchDeleteArgs(): array
+    {
+        return [
+            'ids' => [
+                'type'     => 'array',
+                'required' => true,
+                'items'    => [
+                    'type' => 'integer',
+                ],
+            ],
+            'mode' => [
+                'type'    => 'string',
+                'enum'    => [BulkDelete::MODE_TRASH, BulkDelete::MODE_PERMANENT],
+                'default' => BulkDelete::MODE_TRASH,
+            ],
+        ];
+    }
+
+    private function getBatchDuplicateArgs(): array
+    {
+        return [
+            'ids' => [
+                'type'     => 'array',
+                'required' => true,
+                'minItems' => 1,
+                'maxItems' => 100,
+                'items'    => [
+                    'type' => 'integer',
+                ],
+            ],
+            'copy_meta' => [
+                'type'    => 'boolean',
+                'default' => true,
+            ],
+            'copy_images' => [
+                'type'    => 'boolean',
+                'default' => true,
             ],
         ];
     }

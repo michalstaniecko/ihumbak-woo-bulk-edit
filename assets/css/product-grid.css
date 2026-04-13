@@ -1119,3 +1119,137 @@
 	color: #646970;
 	font-style: italic;
 }
+
+/* ── Bulk Delete ─────────────────────────────────────────── */
+
+.iwbe-btn-delete-selected {
+	padding: 4px 12px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	background: #fff;
+	color: #b32d2e;
+	font-size: 13px;
+	line-height: 1.6;
+	cursor: pointer;
+}
+
+.iwbe-btn-delete-selected:hover:not( :disabled ) {
+	border-color: #b32d2e;
+	background: #fcf0f1;
+}
+
+.iwbe-btn-delete-selected:disabled {
+	color: #a7aaad;
+	cursor: not-allowed;
+}
+
+.iwbe-button-danger {
+	background: #b32d2e !important;
+	border-color: #b32d2e !important;
+	color: #fff !important;
+}
+
+.iwbe-button-danger:hover:not( :disabled ) {
+	background: #8a1f20 !important;
+	border-color: #8a1f20 !important;
+}
+
+.iwbe-button-danger:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
+.iwbe-bulk-delete-mode {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	border: 0;
+	padding: 0;
+	margin: 0 0 16px;
+}
+
+.iwbe-bulk-delete-mode legend {
+	font-weight: 600;
+	margin-bottom: 8px;
+}
+
+.iwbe-bulk-delete-option {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	column-gap: 8px;
+	row-gap: 2px;
+	align-items: start;
+	padding: 8px;
+	border: 1px solid #dcdcde;
+	border-radius: 3px;
+	cursor: pointer;
+}
+
+.iwbe-bulk-delete-option:hover {
+	border-color: #2271b1;
+}
+
+.iwbe-bulk-delete-option input[ type='radio' ] {
+	grid-row: 1 / span 2;
+	margin-top: 3px;
+}
+
+.iwbe-bulk-delete-option-label {
+	font-weight: 600;
+	color: #2c3338;
+}
+
+.iwbe-bulk-delete-option-caption {
+	font-size: 12px;
+	color: #646970;
+}
+
+.iwbe-bulk-delete-warning {
+	margin-top: 12px;
+	padding: 12px;
+	border-left: 4px solid #b32d2e;
+	background: #fcf0f1;
+	color: #2c3338;
+}
+
+.iwbe-bulk-delete-warning p {
+	margin: 0 0 8px;
+}
+
+.iwbe-bulk-delete-confirm-input {
+	width: 100%;
+	padding: 6px 8px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	font-size: 13px;
+	background: #fff;
+}
+
+.iwbe-bulk-delete-confirm-input:focus {
+	border-color: #b32d2e;
+	box-shadow: 0 0 0 1px #b32d2e;
+	outline: none;
+}
+
+/* ── Bulk Duplicate ──────────────────────────────────────── */
+
+.iwbe-btn-duplicate-selected {
+	padding: 4px 12px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	background: #fff;
+	color: #2271b1;
+	font-size: 13px;
+	line-height: 1.6;
+	cursor: pointer;
+}
+
+.iwbe-btn-duplicate-selected:hover:not( :disabled ) {
+	border-color: #2271b1;
+	background: #f0f6fc;
+}
+
+.iwbe-btn-duplicate-selected:disabled {
+	color: #a7aaad;
+	cursor: not-allowed;
+}

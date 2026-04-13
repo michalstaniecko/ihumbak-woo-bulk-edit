@@ -159,6 +159,52 @@ export const BatchSaveResponseSchema = z.object( {
 } );
 export type BatchSaveResponse = z.infer< typeof BatchSaveResponseSchema >;
 
+// ── Bulk Delete ─────────────────────────────────────────────
+export const BulkDeleteModeSchema = z.enum( [ 'trash', 'permanent' ] );
+export type BulkDeleteMode = z.infer< typeof BulkDeleteModeSchema >;
+
+export const BulkDeleteResultSchema = z.object( {
+	status: z.enum( [ 'success', 'error' ] ),
+	id: z.number(),
+	message: z.string().optional(),
+	code: z.string().optional(),
+} );
+export type BulkDeleteResult = z.infer< typeof BulkDeleteResultSchema >;
+
+export const BulkDeleteResponseSchema = z.object( {
+	results: z.array( BulkDeleteResultSchema ),
+	total: z.number(),
+	success: z.number(),
+	errors: z.number(),
+	variation_errors: z.number(),
+	mode: BulkDeleteModeSchema,
+} );
+export type BulkDeleteResponse = z.infer< typeof BulkDeleteResponseSchema >;
+
+// ── Bulk Duplicate ──────────────────────────────────────────
+export const BulkDuplicateResultSchema = z.object( {
+	status: z.enum( [ 'success', 'error' ] ),
+	id: z.number(),
+	new_id: z.number().optional(),
+	message: z.string().optional(),
+	code: z.string().optional(),
+} );
+export type BulkDuplicateResult = z.infer< typeof BulkDuplicateResultSchema >;
+
+export const BulkDuplicateResponseSchema = z.object( {
+	results: z.array( BulkDuplicateResultSchema ),
+	total: z.number(),
+	success: z.number(),
+	errors: z.number(),
+} );
+export type BulkDuplicateResponse = z.infer< typeof BulkDuplicateResponseSchema >;
+
+export interface BulkDuplicatePayload {
+	ids: number[];
+	copy_meta: boolean;
+	copy_images: boolean;
+}
+
 // ── Changelog ────────────────────────────────────────────────
 export const ChangelogEntrySchema = z.object( {
 	id: z.number(),

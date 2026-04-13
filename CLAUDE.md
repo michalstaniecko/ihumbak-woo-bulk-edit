@@ -22,6 +22,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
   - `POST /products/query` — fully working, filters/sorts/paginates via native SQL
   - `PUT /products/batch` — fully working (BatchSaver + ProductSaver, writes audit log)
   - `DELETE /products/batch` — registered, stub (awaits BulkDelete, Issue #23)
+  - `POST /products/duplicate` — fully working (Issue #41 — `Operations\BulkDuplicate` wraps `WC_Admin_Duplicate_Product::product_duplicate()`; `copy_meta`/`copy_images` toggles; max 100 IDs/req; one audit-log entry per parent as `_duplicated` with `source_id`/`source_name`/`variations` count)
   - `GET /changelog` — fully working (filters: product_id, user_id, field, date_from, date_to; pagination)
 - Field system: FieldInterface, AbstractField, FieldType enum (11 types), FieldRegistry
 - **35 core fields** covering all WC product attributes (Issue #14): name, sku, slug, status, regular_price, sale_price, stock_quantity, manage_stock, backorders, sold_individually, weight, length, width, height, shipping_class, categories, tags, description, short_description, featured, catalog_visibility, reviews_allowed, menu_order, purchase_note, virtual, downloadable, download_limit, download_expiry, external_url, button_text, upsells, cross_sells, thumbnail, gallery, date_created
@@ -312,6 +313,7 @@ Endpoints and status:
 | `POST` | `/products/query` | Implemented |
 | `PUT` | `/products/batch` | Implemented (BatchSaver + ProductSaver, optimistic locking, writes audit log) |
 | `DELETE` | `/products/batch` | Stub (Issue #23) |
+| `POST` | `/products/duplicate` | Implemented (Issue #41 — wraps WC core duplicator, `copy_meta`/`copy_images` flags, max 100 IDs/req, audit-logged as `_duplicated`) |
 | `GET` | `/changelog` | Implemented (filters, pagination) |
 | `POST` | `/products/bulk-operation` | Not implemented — bulk ops currently run client-side in `bulkOperations.ts`, commit via `PUT /products/batch`. A server-side endpoint is only needed for datasets too large for browser iteration |
 | `GET\|POST\|PUT\|DELETE` | `/filters` | Planned (Issue #18) |

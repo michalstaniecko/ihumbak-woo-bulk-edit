@@ -1,10 +1,19 @@
 import { apiFetch } from './client';
-import { ProductsResponseSchema, BatchSaveResponseSchema } from '@/types/api';
+import {
+	ProductsResponseSchema,
+	BatchSaveResponseSchema,
+	BulkDeleteResponseSchema,
+	BulkDuplicateResponseSchema,
+} from '@/types/api';
 import type {
 	ProductsResponse,
 	ProductsQueryParams,
 	BatchSaveItem,
 	BatchSaveResponse,
+	BulkDeleteMode,
+	BulkDeleteResponse,
+	BulkDuplicatePayload,
+	BulkDuplicateResponse,
 } from '@/types/api';
 
 export function fetchProducts(
@@ -25,6 +34,33 @@ export function batchSave(
 	return apiFetch( 'products/batch', BatchSaveResponseSchema, {
 		method: 'PUT',
 		body: { changes },
+		signal,
+	} );
+}
+
+export interface BulkDeletePayload {
+	ids: number[];
+	mode: BulkDeleteMode;
+}
+
+export function bulkDeleteProducts(
+	payload: BulkDeletePayload,
+	signal?: AbortSignal
+): Promise< BulkDeleteResponse > {
+	return apiFetch( 'products/batch', BulkDeleteResponseSchema, {
+		method: 'DELETE',
+		body: payload,
+		signal,
+	} );
+}
+
+export function bulkDuplicateProducts(
+	payload: BulkDuplicatePayload,
+	signal?: AbortSignal
+): Promise< BulkDuplicateResponse > {
+	return apiFetch( 'products/duplicate', BulkDuplicateResponseSchema, {
+		method: 'POST',
+		body: payload,
 		signal,
 	} );
 }
