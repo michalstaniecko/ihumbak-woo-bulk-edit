@@ -1,9 +1,14 @@
 import { useState } from 'react';
 import { __, sprintf } from '@wordpress/i18n';
 import { useChangesStore, useEditingStore } from '@/store';
-import type { BulkDeleteResponse, Product } from '@/types/api';
+import type {
+	BulkDeleteResponse,
+	BulkDuplicateResponse,
+	Product,
+} from '@/types/api';
 import type { UseBatchSaveReturn } from '@/hooks/useBatchSave';
 import { BulkDeleteConfirmModal } from './bulkDelete';
+import { BulkDuplicateConfirmModal } from './bulkDuplicate';
 
 interface StatusBarProps {
 	total: number;
@@ -13,6 +18,7 @@ interface StatusBarProps {
 	selectedProducts: Product[];
 	batchSave: UseBatchSaveReturn;
 	onDeleted: ( result: BulkDeleteResponse ) => void;
+	onDuplicated: ( result: BulkDuplicateResponse ) => void;
 }
 
 export function StatusBar( {
@@ -23,8 +29,10 @@ export function StatusBar( {
 	selectedProducts,
 	batchSave,
 	onDeleted,
+	onDuplicated,
 }: StatusBarProps ): JSX.Element {
 	const [ showDeleteModal, setShowDeleteModal ] = useState( false );
+	const [ showDuplicateModal, setShowDuplicateModal ] = useState( false );
 	const changes = useChangesStore( ( state ) => state.changes );
 	const discardAll = useChangesStore( ( state ) => state.discardAll );
 	const stopEditing = useEditingStore( ( state ) => state.stopEditing );
@@ -147,6 +155,15 @@ export function StatusBar( {
 
 			<button
 				type="button"
+				className="iwbe-btn iwbe-btn-duplicate-selected"
+				onClick={ () => setShowDuplicateModal( true ) }
+				disabled={ selectedCount === 0 }
+			>
+				{ __( 'Duplikuj zaznaczone', 'ihumbak-woo-bulk-edit' ) }
+			</button>
+
+			<button
+				type="button"
 				className="iwbe-btn-delete-selected"
 				onClick={ () => setShowDeleteModal( true ) }
 				disabled={ selectedCount === 0 }
@@ -199,6 +216,18 @@ export function StatusBar( {
 					selectedCount={ selectedCount }
 					onClose={ () => setShowDeleteModal( false ) }
 					onConfirmed={ ( result ) => onDeleted( result ) }
+				/>
+			) }
+
+			{ showDuplicateModal && (
+				<BulkDuplicateConfirmModal
+					selectedIds={ selectedIds }
+					selectedCount={ selectedCount }
+					onClose={ () => setShowDuplicateModal( false ) }
+					onDuplicated={ ( result ) => {
+						onDuplicated( result );
+						setShowDuplicateModal( false );
+					} }
 				/>
 			) }
 		</div>
