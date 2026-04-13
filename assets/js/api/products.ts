@@ -3,6 +3,7 @@ import {
 	ProductsResponseSchema,
 	BatchSaveResponseSchema,
 	BulkDeleteResponseSchema,
+	BulkDuplicateResponseSchema,
 } from '@/types/api';
 import type {
 	ProductsResponse,
@@ -11,6 +12,8 @@ import type {
 	BatchSaveResponse,
 	BulkDeleteMode,
 	BulkDeleteResponse,
+	BulkDuplicatePayload,
+	BulkDuplicateResponse,
 } from '@/types/api';
 
 export function fetchProducts(
@@ -46,6 +49,17 @@ export function bulkDeleteProducts(
 ): Promise< BulkDeleteResponse > {
 	return apiFetch( 'products/batch', BulkDeleteResponseSchema, {
 		method: 'DELETE',
+		body: payload,
+		signal,
+	} );
+}
+
+export function bulkDuplicateProducts(
+	payload: BulkDuplicatePayload,
+	signal?: AbortSignal
+): Promise< BulkDuplicateResponse > {
+	return apiFetch( 'products/duplicate', BulkDuplicateResponseSchema, {
+		method: 'POST',
 		body: payload,
 		signal,
 	} );

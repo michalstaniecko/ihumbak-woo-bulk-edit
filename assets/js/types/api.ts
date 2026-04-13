@@ -180,6 +180,30 @@ export const BulkDeleteResponseSchema = z.object( {
 } );
 export type BulkDeleteResponse = z.infer< typeof BulkDeleteResponseSchema >;
 
+// ── Bulk Duplicate ──────────────────────────────────────────
+export const BulkDuplicateResultSchema = z.object( {
+	status: z.enum( [ 'success', 'error' ] ),
+	id: z.number(),
+	new_id: z.number().optional(),
+	message: z.string().optional(),
+	code: z.string().optional(),
+} );
+export type BulkDuplicateResult = z.infer< typeof BulkDuplicateResultSchema >;
+
+export const BulkDuplicateResponseSchema = z.object( {
+	results: z.array( BulkDuplicateResultSchema ),
+	total: z.number(),
+	success: z.number(),
+	errors: z.number(),
+} );
+export type BulkDuplicateResponse = z.infer< typeof BulkDuplicateResponseSchema >;
+
+export interface BulkDuplicatePayload {
+	ids: number[];
+	copy_meta: boolean;
+	copy_images: boolean;
+}
+
 // ── Changelog ────────────────────────────────────────────────
 export const ChangelogEntrySchema = z.object( {
 	id: z.number(),

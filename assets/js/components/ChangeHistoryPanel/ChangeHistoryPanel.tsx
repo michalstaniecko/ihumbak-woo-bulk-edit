@@ -37,8 +37,31 @@ function formatValue( value: unknown ): string {
 }
 
 function fieldLabel( field: string, fields: Field[] | undefined ): string {
+	if ( field === '_duplicated' ) {
+		return __( 'Duplikat', 'ihumbak-woo-bulk-edit' );
+	}
+	if ( field === '_deleted' ) {
+		return __( 'Usunięte', 'ihumbak-woo-bulk-edit' );
+	}
 	const match = fields?.find( ( f ) => f.key === field );
 	return match ? match.label : field;
+}
+
+interface DuplicatedNewValue {
+	status?: string;
+	source_id?: number;
+	source_name?: string;
+	variations?: number;
+	copy_meta?: boolean;
+	copy_images?: boolean;
+}
+
+function isDuplicatedNewValue( value: unknown ): value is DuplicatedNewValue {
+	return (
+		typeof value === 'object' &&
+		value !== null &&
+		( 'source_id' in value || 'source_name' in value )
+	);
 }
 
 export function ChangeHistoryPanel( {
@@ -293,41 +316,82 @@ export function ChangeHistoryPanel( {
 								</tr>
 							</thead>
 							<tbody>
-								{ items.map( ( entry ) => (
-									<tr key={ entry.id }>
-										<td>{ entry.changed_at }</td>
-										<td>
-											{ entry.user_name ||
-												`#${ entry.user_id }` }
-										</td>
-										<td>
-											<a
-												href={ `${ iwbeData.adminUrl }post.php?post=${ entry.product_id }&action=edit` }
-												target="_blank"
-												rel="noreferrer"
-											>
-												{ entry.product_name ||
-													`#${ entry.product_id }` }
-											</a>
-										</td>
-										<td>
-											{ fieldLabel(
-												entry.field,
-												fields
-											) }
-										</td>
-										<td className="iwbe-changelog-old">
-											{ formatValue(
-												entry.old_value
-											) }
-										</td>
-										<td className="iwbe-changelog-new">
-											{ formatValue(
-												entry.new_value
-											) }
-										</td>
-									</tr>
-								) ) }
+								{ items.map( ( entry ) => {
+									const isDuplicated =
+										entry.field === '_duplicated' &&
+										isDuplicatedNewValue(
+											entry.new_value
+										);
+									return (
+										<tr key={ entry.id }>
+											<td>{ entry.changed_at }</td>
+											<td>
+												{ entry.user_name ||
+													`#${ entry.user_id }` }
+											</td>
+											<td>
+												<a
+													href={ `${ iwbeData.adminUrl }post.php?post=${ entry.product_id }&action=edit` }
+													target="_blank"
+													rel="noreferrer"
+												>
+													{ entry.product_name ||
+														`#${ entry.product_id }` }
+												</a>
+											</td>
+											<td>
+												{ fieldLabel(
+													entry.field,
+													fields
+												) }
+											</td>
+											<td className="iwbe-changelog-old">
+												{ isDuplicated
+													? '—'
+													: formatValue(
+															entry.old_value
+														) }
+											</td>
+											<td className="iwbe-changelog-new">
+												{ isDuplicated &&
+												isDuplicatedNewValue(
+													entry.new_value
+												) ? (
+													<>
+														<a
+															href={ `${ iwbeData.adminUrl }post.php?post=${ entry.new_value.source_id }&action=edit` }
+															target="_blank"
+															rel="noreferrer"
+														>
+															{ entry.new_value
+																.source_name ||
+																`#${ entry.new_value.source_id }` }
+														</a>
+														{ ' → ' }
+														<a
+															href={ `${ iwbeData.adminUrl }post.php?post=${ entry.product_id }&action=edit` }
+															target="_blank"
+															rel="noreferrer"
+														>
+															{ sprintf(
+																/* translators: %d: new draft product ID */
+																__(
+																	'szkic #%d',
+																	'ihumbak-woo-bulk-edit'
+																),
+																entry.product_id
+															) }
+														</a>
+													</>
+												) : (
+													formatValue(
+														entry.new_value
+													)
+												) }
+											</td>
+										</tr>
+									);
+								} ) }
 							</tbody>
 						</table>
 					) }

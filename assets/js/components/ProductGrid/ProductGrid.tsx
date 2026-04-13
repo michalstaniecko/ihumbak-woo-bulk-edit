@@ -10,7 +10,11 @@ import { getColumnWidths } from './columnFactory';
 import { useGridKeyboardNav } from '@/hooks/useGridKeyboardNav';
 import { useBatchSave } from '@/hooks/useBatchSave';
 import { BulkEditModal } from './bulkEdit';
-import type { BulkDeleteResponse, Field } from '@/types/api';
+import type {
+	BulkDeleteResponse,
+	BulkDuplicateResponse,
+	Field,
+} from '@/types/api';
 
 export function ProductGrid(): JSX.Element {
 	const {
@@ -41,6 +45,13 @@ export function ProductGrid(): JSX.Element {
 
 	const handleDeleted = useCallback(
 		( _result: BulkDeleteResponse ) => {
+			table.resetRowSelection();
+		},
+		[ table ]
+	);
+
+	const handleDuplicated = useCallback(
+		( _result: BulkDuplicateResponse ) => {
 			table.resetRowSelection();
 		},
 		[ table ]
@@ -115,6 +126,7 @@ export function ProductGrid(): JSX.Element {
 					selectedProducts={ selectedProducts }
 					batchSave={ batchSave }
 					onDeleted={ handleDeleted }
+					onDuplicated={ handleDuplicated }
 				/>
 			</div>
 

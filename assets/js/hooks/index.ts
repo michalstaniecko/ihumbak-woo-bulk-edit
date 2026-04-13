@@ -7,3 +7,5 @@ export { useBatchSave } from './useBatchSave';
 export type { BatchSaveProgress, UseBatchSaveReturn } from './useBatchSave';
 export { useBulkDelete } from './useBulkDelete';
 export type { UseBulkDeleteReturn } from './useBulkDelete';
+export { useBulkDuplicate } from './useBulkDuplicate';
+export type { UseBulkDuplicateReturn } from './useBulkDuplicate';
