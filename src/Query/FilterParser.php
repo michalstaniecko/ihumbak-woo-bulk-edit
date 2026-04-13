@@ -79,7 +79,7 @@ final class FilterParser
         OperatorInterface $operator,
         mixed $value,
     ): void {
-        // Post column fields (name, status).
+        // Post column fields (name, status, slug, description, ...).
         $column = $builder->resolveColumn($fieldKey);
 
         if ($column !== null) {
@@ -88,13 +88,62 @@ final class FilterParser
             return;
         }
 
-        // Meta fields (sku, regular_price, sale_price, stock_quantity).
+        // Meta fields (sku, regular_price, sale_price, stock_quantity, ...).
         $metaKey = $builder->getMetaKey($fieldKey);
 
         if ($metaKey !== null) {
             $alias = $builder->joinMeta($metaKey);
             $result = $operator->toSql("{$alias}.meta_value", $value);
             $builder->addPostCondition($result['sql'], $result['values']);
+            return;
         }
+
+        // Taxonomy fields (categories, tags, shipping_class).
+        $taxonomy = $builder->getTaxonomyName($fieldKey);
+
+        if ($taxonomy !== null) {
+            $this->applyTaxonomyCondition($builder, $taxonomy, $operator, $value);
+        }
+    }
+
+    private function applyTaxonomyCondition(
+        QueryBuilder $builder,
+        string $taxonomy,
+        OperatorInterface $operator,
+        mixed $value,
+    ): void {
+        $operatorId = $operator->getIdentifier();
+
+        // IS EMPTY / IS NOT EMPTY: check existence of any term in the taxonomy,
+        // independent of the (absent) value.
+        if ($operatorId === 'IS EMPTY') {
+            $builder->addTaxonomyExistsCondition($taxonomy, false);
+            return;
+        }
+
+        if ($operatorId === 'IS NOT EMPTY') {
+            $builder->addTaxonomyExistsCondition($taxonomy, true);
+            return;
+        }
+
+        // Negation semantics: "!=" / "NOT LIKE" on a taxonomy mean
+        // "product has no term matching the value" — implemented as NOT IN.
+        // Note: products with zero terms in the taxonomy also match this, which
+        // matches the intuitive "not in category X" reading.
+        $negate = in_array($operatorId, ['!=', 'NOT LIKE'], true);
+
+        $positiveOperator = match ($operatorId) {
+            '!='       => $this->operators->get('='),
+            'NOT LIKE' => $this->operators->get('LIKE'),
+            default    => $operator,
+        };
+
+        // Defensive: registered default operators always exist; bail if somehow absent.
+        if ($positiveOperator === null) {
+            return;
+        }
+
+        $result = $positiveOperator->toSql('t.name', $value);
+        $builder->addTaxonomyCondition($taxonomy, $result['sql'], $result['values'], $negate);
     }
 }
