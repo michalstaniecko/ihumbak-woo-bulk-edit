@@ -1,11 +1,15 @@
+import { useEffect, useRef, useState } from 'react';
 import { flexRender } from '@tanstack/react-table';
 import type { Table } from '@tanstack/react-table';
-import type { Product } from '@/types/api';
-import type { SelectionColumnMeta } from './columnFactory';
+import { __ } from '@wordpress/i18n';
+import type { Field, Product } from '@/types/api';
+import type { FieldColumnMeta, SelectionColumnMeta } from './columnFactory';
+import { inferBulkOperationKind } from './bulkOperations';
 
 interface HeaderRowProps {
 	table: Table< Product >;
 	columnWidths: number[];
+	onBulkEdit?: ( field: Field ) => void;
 }
 
 function isSelectionColumn( meta: unknown ): meta is SelectionColumnMeta {
@@ -18,7 +22,109 @@ function isSelectionColumn( meta: unknown ): meta is SelectionColumnMeta {
 	);
 }
 
-export function HeaderRow( { table, columnWidths }: HeaderRowProps ): JSX.Element {
+function isFieldColumn( meta: unknown ): meta is FieldColumnMeta {
+	return (
+		meta !== null &&
+		meta !== undefined &&
+		typeof meta === 'object' &&
+		'field' in meta
+	);
+}
+
+interface HeaderCellMenuProps {
+	field: Field;
+	onSort: ( order: 'asc' | 'desc' ) => void;
+	onBulkEdit: () => void;
+	sortable: boolean;
+	onClose: () => void;
+}
+
+function HeaderCellMenu( {
+	field,
+	onSort,
+	onBulkEdit,
+	sortable,
+	onClose,
+}: HeaderCellMenuProps ): JSX.Element {
+	const ref = useRef< HTMLDivElement | null >( null );
+
+	useEffect( () => {
+		const handleClickOutside = ( e: MouseEvent ): void => {
+			if (
+				ref.current &&
+				! ref.current.contains( e.target as Node )
+			) {
+				onClose();
+			}
+		};
+		const handleKey = ( e: KeyboardEvent ): void => {
+			if ( e.key === 'Escape' ) {
+				onClose();
+			}
+		};
+		document.addEventListener( 'mousedown', handleClickOutside );
+		document.addEventListener( 'keydown', handleKey );
+		return () => {
+			document.removeEventListener( 'mousedown', handleClickOutside );
+			document.removeEventListener( 'keydown', handleKey );
+		};
+	}, [ onClose ] );
+
+	const bulkSupported = inferBulkOperationKind( field ) !== null;
+
+	return (
+		<div
+			ref={ ref }
+			className="iwbe-header-menu"
+			onClick={ ( e ) => e.stopPropagation() }
+		>
+			{ sortable && (
+				<>
+					<button
+						type="button"
+						className="iwbe-header-menu-item"
+						onClick={ () => {
+							onSort( 'asc' );
+							onClose();
+						} }
+					>
+						{ __( 'Sort ascending', 'ihumbak-woo-bulk-edit' ) }
+					</button>
+					<button
+						type="button"
+						className="iwbe-header-menu-item"
+						onClick={ () => {
+							onSort( 'desc' );
+							onClose();
+						} }
+					>
+						{ __( 'Sort descending', 'ihumbak-woo-bulk-edit' ) }
+					</button>
+					<div className="iwbe-header-menu-separator" />
+				</>
+			) }
+			<button
+				type="button"
+				className="iwbe-header-menu-item"
+				disabled={ ! bulkSupported }
+				onClick={ () => {
+					onBulkEdit();
+					onClose();
+				} }
+			>
+				{ __( 'Bulk edit this column', 'ihumbak-woo-bulk-edit' ) }
+			</button>
+		</div>
+	);
+}
+
+export function HeaderRow( {
+	table,
+	columnWidths,
+	onBulkEdit,
+}: HeaderRowProps ): JSX.Element {
+	const [ openMenu, setOpenMenu ] = useState< string | null >( null );
+
 	return (
 		<div className="iwbe-header-row">
 			{ table.getHeaderGroups().map( ( headerGroup ) =>
@@ -57,23 +163,69 @@ export function HeaderRow( { table, columnWidths }: HeaderRowProps ): JSX.Elemen
 						);
 					}
 
+					const field = isFieldColumn( meta ) ? meta.field : null;
+					const canBulkEdit =
+						field !== null && onBulkEdit !== undefined;
+					const isMenuOpen = openMenu === header.id;
+
 					return (
 						<div
 							key={ header.id }
 							className={ `iwbe-th${ canSort ? ' iwbe-th-sortable' : '' }${ sortClass }` }
 							style={ { width, minWidth: width } }
-							onClick={
-								canSort
-									? header.column.getToggleSortingHandler()
-									: undefined
-							}
 						>
-							{ header.isPlaceholder
-								? null
-								: flexRender(
-										header.column.columnDef.header,
-										header.getContext()
-								  ) }
+							<span
+								className="iwbe-th-label"
+								onClick={
+									canSort
+										? header.column.getToggleSortingHandler()
+										: undefined
+								}
+							>
+								{ header.isPlaceholder
+									? null
+									: flexRender(
+											header.column.columnDef.header,
+											header.getContext()
+									  ) }
+							</span>
+							{ canBulkEdit && (
+								<div className="iwbe-th-menu-wrap">
+									<button
+										type="button"
+										className="iwbe-th-menu-btn"
+										aria-label={ __(
+											'Column options',
+											'ihumbak-woo-bulk-edit'
+										) }
+										aria-haspopup="menu"
+										aria-expanded={ isMenuOpen }
+										onClick={ ( e ) => {
+											e.stopPropagation();
+											setOpenMenu(
+												isMenuOpen ? null : header.id
+											);
+										} }
+									>
+										▾
+									</button>
+									{ isMenuOpen && field && (
+										<HeaderCellMenu
+											field={ field }
+											sortable={ canSort }
+											onSort={ ( order ) => {
+												header.column.toggleSorting(
+													order === 'desc'
+												);
+											} }
+											onBulkEdit={ () =>
+												onBulkEdit( field )
+											}
+											onClose={ () => setOpenMenu( null ) }
+										/>
+									) }
+								</div>
+							) }
 						</div>
 					);
 				} )

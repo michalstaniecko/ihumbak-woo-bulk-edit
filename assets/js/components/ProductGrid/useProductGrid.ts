@@ -28,6 +28,8 @@ export interface UseProductGridReturn {
 	fields: Field[];
 	products: Product[];
 	filters: ProductFilter[];
+	effectiveFilters: ProductFilter[];
+	sort: Sort;
 	searchQuery: string;
 	onSearchChange: ( query: string ) => void;
 	onAddFilter: ( filter: ProductFilter ) => void;
@@ -209,6 +211,8 @@ export function useProductGrid(): UseProductGridReturn {
 		fields: fields ?? [],
 		products: productsData?.items ?? [],
 		filters,
+		effectiveFilters: apiFilters,
+		sort: apiSort,
 		searchQuery,
 		onSearchChange,
 		onAddFilter,

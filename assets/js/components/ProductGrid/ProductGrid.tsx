@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useProductGrid } from './useProductGrid';
 import { HeaderRow } from './HeaderRow';
 import { VirtualizedBody } from './VirtualizedBody';
@@ -8,6 +9,8 @@ import { FilterToolbar } from './FilterToolbar';
 import { getColumnWidths } from './columnFactory';
 import { useGridKeyboardNav } from '@/hooks/useGridKeyboardNav';
 import { useBatchSave } from '@/hooks/useBatchSave';
+import { BulkEditModal } from './bulkEdit';
+import type { Field } from '@/types/api';
 
 export function ProductGrid(): JSX.Element {
 	const {
@@ -22,6 +25,8 @@ export function ProductGrid(): JSX.Element {
 		fields,
 		products,
 		filters,
+		effectiveFilters,
+		sort,
 		searchQuery,
 		onSearchChange,
 		onAddFilter,
@@ -30,6 +35,7 @@ export function ProductGrid(): JSX.Element {
 	} = useProductGrid();
 
 	const batchSave = useBatchSave();
+	const [ bulkEditField, setBulkEditField ] = useState< Field | null >( null );
 
 	useGridKeyboardNav( table, fields );
 
@@ -41,6 +47,10 @@ export function ProductGrid(): JSX.Element {
 		table.getAllColumns().map( ( c ) => c.columnDef )
 	);
 	const totalWidth = columnWidths.reduce( ( sum, w ) => sum + w, 0 );
+
+	const selectedProducts = table
+		.getSelectedRowModel()
+		.rows.map( ( row ) => row.original );
 
 	return (
 		<div className="iwbe-product-grid">
@@ -63,6 +73,7 @@ export function ProductGrid(): JSX.Element {
 						<HeaderRow
 							table={ table }
 							columnWidths={ columnWidths }
+							onBulkEdit={ ( field ) => setBulkEditField( field ) }
 						/>
 					</div>
 
@@ -97,6 +108,17 @@ export function ProductGrid(): JSX.Element {
 					batchSave={ batchSave }
 				/>
 			</div>
+
+			{ bulkEditField && (
+				<BulkEditModal
+					field={ bulkEditField }
+					selectedProducts={ selectedProducts }
+					totalFiltered={ totalItems }
+					filters={ effectiveFilters }
+					sort={ sort }
+					onClose={ () => setBulkEditField( null ) }
+				/>
+			) }
 		</div>
 	);
 }
