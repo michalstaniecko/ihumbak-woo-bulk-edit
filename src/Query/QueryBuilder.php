@@ -65,6 +65,20 @@ final class QueryBuilder
     ];
 
     /**
+     * Maps field keys to WordPress taxonomy slugs.
+     *
+     * Filtering on these fields is done via IN/NOT IN subqueries against
+     * wp_term_relationships to avoid JOIN row multiplication.
+     *
+     * TODO: integration point for custom taxonomies (Brands, etc.) — see Integrations roadmap.
+     */
+    private const TAXONOMIES = [
+        'categories'     => 'product_cat',
+        'tags'           => 'product_tag',
+        'shipping_class' => 'product_shipping_class',
+    ];
+
+    /**
      * Add a WHERE condition for a post column.
      */
     public function addPostCondition(string $sql, array $values): self
@@ -161,6 +175,89 @@ final class QueryBuilder
     public function getMetaKey(string $fieldKey): ?string
     {
         return self::META_KEYS[$fieldKey] ?? null;
+    }
+
+    /**
+     * Get the WordPress taxonomy slug for a field key.
+     *
+     * @return string|null Taxonomy slug (e.g. "product_cat"), or null if the field is not a taxonomy.
+     */
+    public function getTaxonomyName(string $fieldKey): ?string
+    {
+        return self::TAXONOMIES[$fieldKey] ?? null;
+    }
+
+    /**
+     * Check if a field is a taxonomy field.
+     */
+    public function isTaxonomyField(string $fieldKey): bool
+    {
+        return isset(self::TAXONOMIES[$fieldKey]);
+    }
+
+    /**
+     * Add a WHERE condition that matches products whose terms in $taxonomy
+     * satisfy the given clause on t.name.
+     *
+     * Implemented as p.ID IN (...) / p.ID NOT IN (...) subquery — never JOINs,
+     * so row multiplication from products with multiple matching terms cannot occur.
+     *
+     * Edge case with $negate=true: products that have ZERO terms in $taxonomy also
+     * match (they have no term violating the clause). This is the intended semantics
+     * of "this product is not in category X" / "this product has no term like X".
+     *
+     * @param string      $taxonomy      WP taxonomy slug (e.g. "product_cat")
+     * @param string      $nameClauseSql SQL clause produced by an operator on column "t.name"
+     * @param list<mixed> $values        Placeholder values for $nameClauseSql
+     * @param bool        $negate        If true, wrap with NOT IN
+     */
+    public function addTaxonomyCondition(string $taxonomy, string $nameClauseSql, array $values, bool $negate): self
+    {
+        global $wpdb;
+
+        $not = $negate ? 'NOT ' : '';
+        // tr.object_id is BIGINT NOT NULL — NOT IN is safe (no NULL propagation).
+        // Outer p.post_type filter (see buildWhere) constrains matches to products only.
+        $sql = "p.ID {$not}IN (
+            SELECT tr.object_id
+            FROM {$wpdb->term_relationships} tr
+            INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+            INNER JOIN {$wpdb->terms} t ON t.term_id = tt.term_id
+            WHERE tt.taxonomy = %s AND {$nameClauseSql}
+        )";
+
+        $this->conditions[] = [
+            'sql'    => $sql,
+            'values' => array_merge([$taxonomy], $values),
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Add a WHERE condition for "has any / has no" terms in a taxonomy.
+     *
+     * @param string $taxonomy WP taxonomy slug
+     * @param bool   $exists   true → product has at least one term; false → product has zero terms
+     */
+    public function addTaxonomyExistsCondition(string $taxonomy, bool $exists): self
+    {
+        global $wpdb;
+
+        $in = $exists ? 'IN' : 'NOT IN';
+        $sql = "p.ID {$in} (
+            SELECT tr.object_id
+            FROM {$wpdb->term_relationships} tr
+            INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+            WHERE tt.taxonomy = %s
+        )";
+
+        $this->conditions[] = [
+            'sql'    => $sql,
+            'values' => [$taxonomy],
+        ];
+
+        return $this;
     }
 
     /**

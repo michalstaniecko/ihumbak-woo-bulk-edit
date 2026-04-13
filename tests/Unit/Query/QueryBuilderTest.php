@@ -166,4 +166,72 @@ final class QueryBuilderTest extends TestCase
 
         self::assertSame('m0', $alias);
     }
+
+    // --- getTaxonomyName ---
+
+    public function test_getTaxonomyName_categories(): void
+    {
+        self::assertSame('product_cat', $this->builder->getTaxonomyName('categories'));
+    }
+
+    public function test_getTaxonomyName_tags(): void
+    {
+        self::assertSame('product_tag', $this->builder->getTaxonomyName('tags'));
+    }
+
+    public function test_getTaxonomyName_shipping_class(): void
+    {
+        self::assertSame('product_shipping_class', $this->builder->getTaxonomyName('shipping_class'));
+    }
+
+    public function test_getTaxonomyName_unknown_returns_null(): void
+    {
+        self::assertNull($this->builder->getTaxonomyName('bogus'));
+    }
+
+    public function test_getTaxonomyName_meta_field_returns_null(): void
+    {
+        self::assertNull($this->builder->getTaxonomyName('sku'));
+    }
+
+    public function test_getTaxonomyName_post_column_returns_null(): void
+    {
+        self::assertNull($this->builder->getTaxonomyName('name'));
+    }
+
+    // --- isTaxonomyField ---
+
+    public function test_isTaxonomyField_categories(): void
+    {
+        self::assertTrue($this->builder->isTaxonomyField('categories'));
+    }
+
+    public function test_isTaxonomyField_tags(): void
+    {
+        self::assertTrue($this->builder->isTaxonomyField('tags'));
+    }
+
+    public function test_isTaxonomyField_shipping_class(): void
+    {
+        self::assertTrue($this->builder->isTaxonomyField('shipping_class'));
+    }
+
+    public function test_isTaxonomyField_meta_field_is_false(): void
+    {
+        self::assertFalse($this->builder->isTaxonomyField('sku'));
+    }
+
+    public function test_isTaxonomyField_post_column_is_false(): void
+    {
+        self::assertFalse($this->builder->isTaxonomyField('name'));
+    }
+
+    public function test_isTaxonomyField_unknown_is_false(): void
+    {
+        self::assertFalse($this->builder->isTaxonomyField('bogus'));
+    }
+
+    // Note: addTaxonomyCondition / addTaxonomyExistsCondition fluent interface
+    // is covered in tests/Integration/Query/QueryBuilderTest.php — they reference
+    // global $wpdb and need the WP test bootstrap.
 }
