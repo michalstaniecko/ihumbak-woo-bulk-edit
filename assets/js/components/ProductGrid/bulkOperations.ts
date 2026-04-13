@@ -84,7 +84,8 @@ function sentenceCase( str: string ): string {
 export function applyNumericOperation(
 	currentValue: unknown,
 	op: NumericOperation,
-	field: Field
+	field: Field,
+	baseValue?: unknown
 ): number | string | null {
 	if ( op.type === 'clear' ) {
 		return field.type === 'price' ? '' : null;
@@ -94,8 +95,9 @@ export function applyNumericOperation(
 		return formatNumberForField( op.value, field );
 	}
 
-	const current = toFiniteNumber( currentValue );
-	const base = current ?? 0;
+	const source = baseValue !== undefined ? baseValue : currentValue;
+	const sourceNum = toFiniteNumber( source );
+	const base = sourceNum ?? 0;
 
 	switch ( op.type ) {
 		case 'increase':

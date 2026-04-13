@@ -4,6 +4,7 @@ import type { Field, Product, ProductFilter, Sort } from '@/types/api';
 import { useChangesStore } from '@/store';
 import {
 	applyBulkOperation,
+	applyNumericOperation,
 	inferBulkOperationKind,
 	type BulkOperation,
 	type BulkOperationKind,
@@ -12,7 +13,7 @@ import {
 	type BooleanOperation,
 	type TaxonomyOperation,
 } from '../bulkOperations';
-import { NumericBulkForm } from './NumericBulkForm';
+import { NumericBulkForm, type NumericBase } from './NumericBulkForm';
 import { TextBulkForm } from './TextBulkForm';
 import { BooleanBulkForm } from './BooleanBulkForm';
 import { TaxonomyBulkForm } from './TaxonomyBulkForm';
@@ -51,6 +52,9 @@ export function BulkEditModal( {
 	const [ numericOp, setNumericOp ] = useState< NumericOperation | null >(
 		null
 	);
+	const [ numericBase, setNumericBase ] = useState< NumericBase >(
+		'current_sale_price'
+	);
 	const [ textOp, setTextOp ] = useState< TextOperation | null >( null );
 	const [ booleanOp, setBooleanOp ] = useState< BooleanOperation | null >(
 		null
@@ -61,6 +65,7 @@ export function BulkEditModal( {
 
 	const [ applying, setApplying ] = useState( false );
 	const [ error, setError ] = useState< string | null >( null );
+	const [ notice, setNotice ] = useState< string | null >( null );
 	const [ progress, setProgress ] = useState< {
 		loaded: number;
 		total: number;
@@ -75,6 +80,10 @@ export function BulkEditModal( {
 		window.addEventListener( 'keydown', handler );
 		return () => window.removeEventListener( 'keydown', handler );
 	}, [ onClose ] );
+
+	useEffect( () => {
+		setNotice( null );
+	}, [ numericOp, textOp, booleanOp, taxonomyOp, numericBase, scope ] );
 
 	const currentOperation: BulkOperation | null = useMemo( () => {
 		if ( kind === 'numeric' && numericOp ) {
@@ -95,6 +104,15 @@ export function BulkEditModal( {
 	const applyToProducts = useCallback(
 		( products: Product[], operation: BulkOperation ) => {
 			let applied = 0;
+			let skipped = 0;
+
+			const useRegularBase =
+				operation.kind === 'numeric' &&
+				field.key === 'sale_price' &&
+				numericBase === 'current_regular_price' &&
+				operation.op.type !== 'set' &&
+				operation.op.type !== 'clear';
+
 			for ( const product of products ) {
 				const serverValue = product[
 					field.key as keyof Product
@@ -103,19 +121,45 @@ export function BulkEditModal( {
 				const currentValue =
 					pending !== undefined ? pending : serverValue;
 
-				const newValue = applyBulkOperation(
-					currentValue,
-					operation,
-					field
-				);
+				let newValue: unknown;
+
+				if ( useRegularBase && operation.kind === 'numeric' ) {
+					const regularPending = getChangedValue(
+						product.id,
+						'regular_price'
+					);
+					const regularBaseRaw =
+						regularPending !== undefined
+							? regularPending
+							: product.regular_price;
+					const regularBaseNum = parseFloat(
+						String( regularBaseRaw ?? '' )
+					);
+					if ( ! Number.isFinite( regularBaseNum ) ) {
+						skipped += 1;
+						continue;
+					}
+					newValue = applyNumericOperation(
+						currentValue,
+						operation.op,
+						field,
+						regularBaseNum
+					);
+				} else {
+					newValue = applyBulkOperation(
+						currentValue,
+						operation,
+						field
+					);
+				}
 
 				const originalOldValue = serverValue;
 				setChange( product.id, field.key, originalOldValue, newValue );
 				applied += 1;
 			}
-			return applied;
+			return { applied, skipped };
 		},
-		[ field, getChangedValue, setChange ]
+		[ field, getChangedValue, setChange, numericBase ]
 	);
 
 	const handleApply = async (): Promise< void > => {
@@ -123,6 +167,7 @@ export function BulkEditModal( {
 			return;
 		}
 		setError( null );
+		setNotice( null );
 		setApplying( true );
 		setProgress( null );
 
@@ -139,8 +184,32 @@ export function BulkEditModal( {
 				} );
 			}
 
-			applyToProducts( targets, currentOperation );
-			onClose();
+			const { applied, skipped } = applyToProducts(
+				targets,
+				currentOperation
+			);
+			if ( applied === 0 && skipped === 0 ) {
+				setNotice(
+					__(
+						'No products to update.',
+						'ihumbak-woo-bulk-edit'
+					)
+				);
+			} else if ( skipped > 0 ) {
+				setNotice(
+					sprintf(
+						/* translators: 1: number of products updated, 2: number skipped */
+						__(
+							'%1$d products updated, %2$d skipped (missing regular price)',
+							'ihumbak-woo-bulk-edit'
+						),
+						applied,
+						skipped
+					)
+				);
+			} else {
+				onClose();
+			}
 		} catch ( err ) {
 			const message =
 				err instanceof Error
@@ -158,7 +227,15 @@ export function BulkEditModal( {
 
 	const renderForm = (): JSX.Element => {
 		if ( kind === 'numeric' ) {
-			return <NumericBulkForm onChange={ setNumericOp } />;
+			return (
+				<NumericBulkForm
+					field={ field }
+					onChange={ ( op, nextBase ) => {
+						setNumericOp( op );
+						setNumericBase( nextBase );
+					} }
+				/>
+			);
 		}
 		if ( kind === 'text' ) {
 			return <TextBulkForm field={ field } onChange={ setTextOp } />;
@@ -258,6 +335,15 @@ export function BulkEditModal( {
 
 					{ error && (
 						<div className="iwbe-bulk-error">{ error }</div>
+					) }
+					{ notice && (
+						<div
+							className="iwbe-bulk-notice"
+							role="status"
+							aria-live="polite"
+						>
+							{ notice }
+						</div>
 					) }
 					{ applying && progress && (
 						<div className="iwbe-bulk-progress">

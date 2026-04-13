@@ -128,6 +128,100 @@ describe( 'applyNumericOperation', () => {
 	} );
 } );
 
+describe( 'applyNumericOperation with explicit base', () => {
+	// The modal is responsible for pre-validating regular_price before
+	// passing it here; this block only covers the pure-function behavior.
+	const salePriceField = makeField( { key: 'sale_price', type: 'price' } );
+
+	it( 'increase uses explicit base instead of current value', () => {
+		expect(
+			applyNumericOperation(
+				'50.00',
+				{ type: 'increase', amount: 10 },
+				salePriceField,
+				100
+			)
+		).toBe( '110.00' );
+	} );
+
+	it( 'decrease uses explicit base instead of current value', () => {
+		expect(
+			applyNumericOperation(
+				'50.00',
+				{ type: 'decrease', amount: 10 },
+				salePriceField,
+				100
+			)
+		).toBe( '90.00' );
+	} );
+
+	it( 'increase_pct uses explicit base', () => {
+		expect(
+			applyNumericOperation(
+				'50.00',
+				{ type: 'increase_pct', percent: 20 },
+				salePriceField,
+				100
+			)
+		).toBe( '120.00' );
+	} );
+
+	it( 'decrease_pct uses explicit base (regular − 20% = sale)', () => {
+		expect(
+			applyNumericOperation(
+				'50.00',
+				{ type: 'decrease_pct', percent: 20 },
+				salePriceField,
+				100
+			)
+		).toBe( '80.00' );
+	} );
+
+	it( 'round uses explicit base', () => {
+		expect(
+			applyNumericOperation(
+				'50.00',
+				{ type: 'round', precision: 1 },
+				salePriceField,
+				12.3456
+			)
+		).toBe( '12.30' );
+	} );
+
+	it( 'set ignores explicit base', () => {
+		expect(
+			applyNumericOperation(
+				'50.00',
+				{ type: 'set', value: 25 },
+				salePriceField,
+				100
+			)
+		).toBe( '25.00' );
+	} );
+
+	it( 'clear ignores explicit base', () => {
+		expect(
+			applyNumericOperation(
+				'50.00',
+				{ type: 'clear' },
+				salePriceField,
+				100
+			)
+		).toBe( '' );
+	} );
+
+	it( 'undefined base falls back to current value', () => {
+		expect(
+			applyNumericOperation(
+				'50.00',
+				{ type: 'increase', amount: 5 },
+				salePriceField,
+				undefined
+			)
+		).toBe( '55.00' );
+	} );
+} );
+
 describe( 'applyTextOperation', () => {
 	it( 'set replaces value', () => {
 		expect( applyTextOperation( 'old', { type: 'set', value: 'new' } ) ).toBe(
