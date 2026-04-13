@@ -10,6 +10,7 @@ use IhumbakWooBulkEdit\Api\ChangelogController;
 use IhumbakWooBulkEdit\Api\FieldsController;
 use IhumbakWooBulkEdit\Api\ProductsController;
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
+use IhumbakWooBulkEdit\Operations\BulkDelete;
 use IhumbakWooBulkEdit\Persistence\BatchSaver;
 use IhumbakWooBulkEdit\Persistence\ChangeLogRepository;
 use IhumbakWooBulkEdit\Persistence\DatabaseMigrator;
@@ -168,12 +169,20 @@ final class Plugin
         );
 
         $this->container->set(
+            BulkDelete::class,
+            static fn (Container $c): BulkDelete => new BulkDelete(
+                $c->get(ChangeLogRepository::class),
+            )
+        );
+
+        $this->container->set(
             ProductsController::class,
             static fn (Container $c): ProductsController => new ProductsController(
                 $c->get(FieldRegistry::class),
                 $c->get(CapabilityChecker::class),
                 $c->get(RateLimiter::class),
                 $c->get(BatchSaver::class),
+                $c->get(BulkDelete::class),
             )
         );
 

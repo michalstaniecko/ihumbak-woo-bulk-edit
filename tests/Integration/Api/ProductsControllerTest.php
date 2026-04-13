@@ -6,6 +6,11 @@ namespace IhumbakWooBulkEdit\Tests\Integration\Api;
 
 use IhumbakWooBulkEdit\Api\ProductsController;
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
+use IhumbakWooBulkEdit\Operations\BulkDelete;
+use IhumbakWooBulkEdit\Persistence\BatchSaver;
+use IhumbakWooBulkEdit\Persistence\ChangeLogRepository;
+use IhumbakWooBulkEdit\Persistence\DatabaseMigrator;
+use IhumbakWooBulkEdit\Persistence\ProductSaver;
 use IhumbakWooBulkEdit\Security\CapabilityChecker;
 use IhumbakWooBulkEdit\Security\RateLimiter;
 use WP_REST_Request;
@@ -17,11 +22,18 @@ final class ProductsControllerTest extends WP_UnitTestCase
     {
         parent::set_up();
 
-        add_action('rest_api_init', static function (): void {
-            $controller = new ProductsController(
-                new FieldRegistry(),
+        $migrator = new DatabaseMigrator();
+        $migrator->migrate();
+
+        add_action('rest_api_init', static function () use ($migrator): void {
+            $fieldRegistry = new FieldRegistry();
+            $changeLog     = new ChangeLogRepository($migrator);
+            $controller    = new ProductsController(
+                $fieldRegistry,
                 new CapabilityChecker(),
                 new RateLimiter(),
+                new BatchSaver(new ProductSaver($fieldRegistry), $changeLog),
+                new BulkDelete($changeLog),
             );
             $controller->register_routes();
         });

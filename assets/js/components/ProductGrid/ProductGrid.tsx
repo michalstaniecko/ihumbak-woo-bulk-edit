@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useProductGrid } from './useProductGrid';
 import { HeaderRow } from './HeaderRow';
 import { VirtualizedBody } from './VirtualizedBody';
@@ -10,7 +10,7 @@ import { getColumnWidths } from './columnFactory';
 import { useGridKeyboardNav } from '@/hooks/useGridKeyboardNav';
 import { useBatchSave } from '@/hooks/useBatchSave';
 import { BulkEditModal } from './bulkEdit';
-import type { Field } from '@/types/api';
+import type { BulkDeleteResponse, Field } from '@/types/api';
 
 export function ProductGrid(): JSX.Element {
 	const {
@@ -38,6 +38,13 @@ export function ProductGrid(): JSX.Element {
 	const [ bulkEditField, setBulkEditField ] = useState< Field | null >( null );
 
 	useGridKeyboardNav( table, fields );
+
+	const handleDeleted = useCallback(
+		( _result: BulkDeleteResponse ) => {
+			table.resetRowSelection();
+		},
+		[ table ]
+	);
 
 	if ( isLoading ) {
 		return <LoadingSkeleton />;
@@ -105,7 +112,9 @@ export function ProductGrid(): JSX.Element {
 					selectedCount={ selectedCount }
 					isFetching={ isFetching && ! isLoading }
 					products={ products }
+					selectedProducts={ selectedProducts }
 					batchSave={ batchSave }
+					onDeleted={ handleDeleted }
 				/>
 			</div>
 
