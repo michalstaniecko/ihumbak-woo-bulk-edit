@@ -57,7 +57,7 @@ final class ProductsController extends RestController
             [
                 'methods'             => WP_REST_Server::DELETABLE,
                 'callback'            => [$this, 'batch_delete'],
-                'permission_callback' => [$this->capabilityChecker, 'permissionWrite'],
+                'permission_callback' => [$this->capabilityChecker, 'permissionDelete'],
                 'args'                => $this->getBatchDeleteArgs(),
             ],
         ]);
@@ -208,14 +208,6 @@ final class ProductsController extends RestController
                 'wbm_too_many_ids',
                 __('Too many product IDs in a single request (maximum 500).', 'ihumbak-woo-bulk-edit'),
                 400
-            );
-        }
-
-        if ($mode === BulkDelete::MODE_PERMANENT && ! $this->capabilityChecker->canDelete()) {
-            return $this->error(
-                'wbm_forbidden',
-                __('You do not have permission to permanently delete products.', 'ihumbak-woo-bulk-edit'),
-                403
             );
         }
 

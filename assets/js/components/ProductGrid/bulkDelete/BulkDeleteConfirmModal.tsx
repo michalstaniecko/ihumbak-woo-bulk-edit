@@ -72,7 +72,8 @@ export function BulkDeleteConfirmModal( {
 				: null;
 
 	const partialFailure =
-		lastResult !== undefined && lastResult.errors > 0;
+		lastResult !== undefined &&
+		( lastResult.errors > 0 || lastResult.variation_errors > 0 );
 
 	return (
 		<div
@@ -210,6 +211,21 @@ export function BulkDeleteConfirmModal( {
 								),
 								lastResult.success,
 								lastResult.errors
+							) }
+							{ lastResult.variation_errors > 0 && (
+								<>
+									{ ' ' }
+									{ sprintf(
+										/* translators: %d: number of variations that failed to delete */
+										_n(
+											'%d variation could not be deleted and is now orphaned.',
+											'%d variations could not be deleted and are now orphaned.',
+											lastResult.variation_errors,
+											'ihumbak-woo-bulk-edit'
+										),
+										lastResult.variation_errors
+									) }
+								</>
 							) }
 						</div>
 					) }

@@ -33,11 +33,14 @@ final class BulkDelete
     /**
      * Process a list of product IDs for deletion.
      *
-     * Note: `results` may contain more rows than `count($ids)` when a permanent
-     * delete of a variable product cascades to its variations and one or more
-     * variation deletes fail — each failed variation adds its own error row.
-     * Variation deletes never increment `success`; only caller-supplied parent
-     * IDs do.
+     * Parent-level accounting keeps the invariant `success + errors === total`
+     * where `total = count(unique positive $ids)`. Cascade-delete failures on
+     * child variations (only relevant in MODE_PERMANENT for variable products)
+     * are tracked separately in `variation_errors` — they do NOT affect the
+     * parent's success/errors counters. A failed variation still appends an
+     * error row to `results` (with code `wbm_variation_delete_failed`) so the
+     * caller can inspect which variations were orphaned, but the sum of rows
+     * in `results` may therefore exceed `total`.
      *
      * @param list<int> $ids  Product IDs to delete. Non-positive values are skipped.
      * @param string    $mode Either self::MODE_TRASH or self::MODE_PERMANENT.
@@ -47,6 +50,7 @@ final class BulkDelete
      *     total: int,
      *     success: int,
      *     errors: int,
+     *     variation_errors: int,
      *     mode: string
      * }
      */
@@ -64,10 +68,11 @@ final class BulkDelete
         }
         $normalisedIds = array_values($normalisedIds);
 
-        $results      = [];
-        $successCount = 0;
-        $errorCount   = 0;
-        $logEntries   = [];
+        $results            = [];
+        $successCount       = 0;
+        $errorCount         = 0;
+        $variationErrorCount = 0;
+        $logEntries         = [];
 
         wp_defer_term_counting(true);
 
@@ -148,7 +153,7 @@ final class BulkDelete
                     }
 
                     if (! $vDeleted) {
-                        $errorCount++;
+                        $variationErrorCount++;
                         $results[] = [
                             'status'  => 'error',
                             'id'      => $vid,
@@ -179,11 +184,12 @@ final class BulkDelete
         }
 
         return [
-            'results' => $results,
-            'total'   => count($normalisedIds),
-            'success' => $successCount,
-            'errors'  => $errorCount,
-            'mode'    => $mode,
+            'results'          => $results,
+            'total'            => count($normalisedIds),
+            'success'          => $successCount,
+            'errors'           => $errorCount,
+            'variation_errors' => $variationErrorCount,
+            'mode'             => $mode,
         ];
     }
 

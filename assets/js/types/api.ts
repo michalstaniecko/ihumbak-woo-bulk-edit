@@ -176,6 +176,7 @@ export const BulkDeleteResponseSchema = z.object( {
 	total: z.number(),
 	success: z.number(),
 	errors: z.number(),
+	variation_errors: z.number(),
 	mode: BulkDeleteModeSchema,
 } );
 export type BulkDeleteResponse = z.infer< typeof BulkDeleteResponseSchema >;

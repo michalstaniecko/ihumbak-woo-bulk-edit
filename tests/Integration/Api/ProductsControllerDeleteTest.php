@@ -112,10 +112,25 @@ final class ProductsControllerDeleteTest extends WP_UnitTestCase
 
     // --- Mode: trash ---
 
-    public function test_trash_mode_as_editor_moves_product_to_trash(): void
+    public function test_trash_mode_as_editor_without_delete_products_is_rejected(): void
     {
         wp_set_current_user($this->editorUserId);
         $id = $this->createSimpleProduct('Trashable', 'SKU-TRASH-1');
+
+        $response = $this->dispatchDelete(['ids' => [$id], 'mode' => 'trash']);
+        $data = $response->get_data();
+
+        self::assertGreaterThanOrEqual(400, $response->get_status());
+        $code = is_array($data) && isset($data['code']) ? $data['code'] : '';
+        self::assertContains($code, ['rest_forbidden', 'rest_cannot_access']);
+        // Product must still be published (not trashed).
+        self::assertSame('publish', get_post_status($id));
+    }
+
+    public function test_trash_mode_as_admin_with_delete_products_moves_product_to_trash(): void
+    {
+        wp_set_current_user($this->adminUserId);
+        $id = $this->createSimpleProduct('Trashable', 'SKU-TRASH-A1');
 
         $response = $this->dispatchDelete(['ids' => [$id], 'mode' => 'trash']);
         $data = $response->get_data();
@@ -128,7 +143,7 @@ final class ProductsControllerDeleteTest extends WP_UnitTestCase
         self::assertSame('trash', get_post_status($id));
     }
 
-    public function test_permanent_mode_as_editor_returns_403_wbm_forbidden(): void
+    public function test_permanent_mode_as_editor_without_delete_products_is_rejected(): void
     {
         wp_set_current_user($this->editorUserId);
         $id = $this->createSimpleProduct('NoPermDelete', 'SKU-NOP-1');
@@ -136,8 +151,9 @@ final class ProductsControllerDeleteTest extends WP_UnitTestCase
         $response = $this->dispatchDelete(['ids' => [$id], 'mode' => 'permanent']);
         $data = $response->get_data();
 
-        self::assertSame(403, $response->get_status());
-        self::assertSame('wbm_forbidden', $data['code']);
+        self::assertGreaterThanOrEqual(400, $response->get_status());
+        $code = is_array($data) && isset($data['code']) ? $data['code'] : '';
+        self::assertContains($code, ['rest_forbidden', 'rest_cannot_access']);
         // Product must still exist.
         self::assertNotFalse(wc_get_product($id));
     }
@@ -172,7 +188,10 @@ final class ProductsControllerDeleteTest extends WP_UnitTestCase
         $data = $response->get_data();
 
         self::assertSame(200, $response->get_status());
+        self::assertSame(1, $data['total']);
         self::assertSame(1, $data['success']);
+        self::assertSame(0, $data['errors']);
+        self::assertSame(0, $data['variation_errors']);
 
         // Parent gone.
         wp_cache_delete($parentId, 'posts');
@@ -192,7 +211,7 @@ final class ProductsControllerDeleteTest extends WP_UnitTestCase
 
     public function test_invalid_mode_returns_400_wbm_invalid_mode(): void
     {
-        wp_set_current_user($this->editorUserId);
+        wp_set_current_user($this->adminUserId);
         $id = $this->createSimpleProduct('ValidationA', 'SKU-VA-1');
 
         $response = $this->dispatchDelete(['ids' => [$id], 'mode' => 'nuke']);
@@ -210,7 +229,7 @@ final class ProductsControllerDeleteTest extends WP_UnitTestCase
 
     public function test_empty_ids_returns_400_wbm_invalid_ids(): void
     {
-        wp_set_current_user($this->editorUserId);
+        wp_set_current_user($this->adminUserId);
 
         $response = $this->dispatchDelete(['ids' => [], 'mode' => 'trash']);
         $data = $response->get_data();
@@ -222,7 +241,7 @@ final class ProductsControllerDeleteTest extends WP_UnitTestCase
 
     public function test_too_many_ids_returns_400_wbm_too_many_ids(): void
     {
-        wp_set_current_user($this->editorUserId);
+        wp_set_current_user($this->adminUserId);
 
         // 501 positive unique integers.
         $ids = range(1, 501);
@@ -236,7 +255,7 @@ final class ProductsControllerDeleteTest extends WP_UnitTestCase
 
     public function test_non_existent_ids_yield_error_rows_but_200_status(): void
     {
-        wp_set_current_user($this->editorUserId);
+        wp_set_current_user($this->adminUserId);
         $real = $this->createSimpleProduct('Mixed', 'SKU-MIX-1');
         $bogus = 999999;
 
@@ -247,6 +266,7 @@ final class ProductsControllerDeleteTest extends WP_UnitTestCase
         self::assertSame(2, $data['total']);
         self::assertSame(1, $data['success']);
         self::assertSame(1, $data['errors']);
+        self::assertSame(0, $data['variation_errors']);
         self::assertSame('trash', get_post_status($real));
     }
 
@@ -254,7 +274,7 @@ final class ProductsControllerDeleteTest extends WP_UnitTestCase
 
     public function test_audit_log_written_for_successful_trash(): void
     {
-        wp_set_current_user($this->editorUserId);
+        wp_set_current_user($this->adminUserId);
         $id = $this->createSimpleProduct('Audited', 'SKU-AUD-1');
 
         $response = $this->dispatchDelete(['ids' => [$id], 'mode' => 'trash']);
@@ -284,7 +304,7 @@ final class ProductsControllerDeleteTest extends WP_UnitTestCase
 
     public function test_audit_log_not_written_for_failed_delete(): void
     {
-        wp_set_current_user($this->editorUserId);
+        wp_set_current_user($this->adminUserId);
         $bogus = 888888;
 
         $response = $this->dispatchDelete(['ids' => [$bogus], 'mode' => 'trash']);
