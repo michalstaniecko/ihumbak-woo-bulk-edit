@@ -1590,3 +1590,80 @@
 .iwbe-td-variation-empty {
 	background-color: transparent;
 }
+
+/* ── Taxonomy Term Picker (Issue #45) ─────────────────────── */
+
+.iwbe-taxonomy-picker {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+}
+
+.iwbe-taxonomy-picker-input {
+	width: 100%;
+	padding: 4px 8px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	font-size: 13px;
+	line-height: 1.6;
+	background: #fff;
+	color: #2c3338;
+	box-sizing: border-box;
+}
+
+.iwbe-taxonomy-picker-input:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+	outline: none;
+}
+
+.iwbe-taxonomy-picker-dropdown {
+	margin-top: 2px;
+	max-height: 200px;
+	overflow-y: auto;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	background: #fff;
+	box-shadow: 0 2px 4px rgba( 0, 0, 0, 0.1 );
+}
+
+.iwbe-taxonomy-picker-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 6px 10px;
+	font-size: 13px;
+	color: #2c3338;
+	cursor: pointer;
+	border-bottom: 1px solid #f0f0f1;
+	user-select: none;
+}
+
+.iwbe-taxonomy-picker-item:last-child {
+	border-bottom: none;
+}
+
+.iwbe-taxonomy-picker-item:hover,
+.iwbe-taxonomy-picker-item--active {
+	background: #e5f5fa;
+	color: #2271b1;
+}
+
+.iwbe-taxonomy-picker-count {
+	font-size: 11px;
+	color: #a7aaad;
+	margin-left: 4px;
+}
+
+.iwbe-taxonomy-picker-loading,
+.iwbe-taxonomy-picker-empty,
+.iwbe-taxonomy-picker-error {
+	padding: 8px 10px;
+	font-size: 13px;
+	color: #646970;
+	font-style: italic;
+}
+
+.iwbe-taxonomy-picker-error {
+	color: #d63638;
+}

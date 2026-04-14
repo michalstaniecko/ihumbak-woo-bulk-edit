@@ -15,3 +15,4 @@ export {
 	useUpdateSavedFilter,
 	useDeleteSavedFilter,
 } from './useSavedFilters';
+export { useTaxonomyTerms, useTaxonomyTermLabels } from './useTaxonomyTerms';

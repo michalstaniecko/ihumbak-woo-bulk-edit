@@ -278,6 +278,258 @@ final class FilterParserTest extends WP_UnitTestCase
         self::assertSame($match, $results[0]['id']);
     }
 
+    // --- term_id filtering (Issue #45) ---
+
+    public function test_apply_category_equal_by_term_id(): void
+    {
+        // Create categories.
+        $shirtsTerm = wp_insert_term('ShirtsByID', 'product_cat');
+        wp_insert_term('HatsByID', 'product_cat');
+
+        self::assertIsArray($shirtsTerm);
+        $shirtsId = (int) $shirtsTerm['term_id'];
+
+        $shirt = $this->createProductWithTermsByIds('Shirt ID test', ['product_cat' => [$shirtsId]]);
+        $hat = $this->createProductWithTerms('Hat ID test', ['product_cat' => ['HatsByID']]);
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => '=', 'value' => (string) $shirtsId],
+        ]);
+
+        $results = $builder->getResults();
+        $ids = array_map(fn($r) => $r['id'], $results);
+
+        self::assertContains($shirt, $ids);
+        self::assertNotContains($hat, $ids);
+    }
+
+    public function test_apply_category_not_equal_by_term_id_excludes_matching(): void
+    {
+        $shirtsTerm = wp_insert_term('ShirtsNEQ', 'product_cat');
+        wp_insert_term('HatsNEQ', 'product_cat');
+
+        self::assertIsArray($shirtsTerm);
+        $shirtsId = (int) $shirtsTerm['term_id'];
+
+        $shirt = $this->createProductWithTermsByIds('Shirt NEQ', ['product_cat' => [$shirtsId]]);
+        $hat = $this->createProductWithTerms('Hat NEQ', ['product_cat' => ['HatsNEQ']]);
+        $noCat = $this->createProduct('No Cat NEQ');
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => '!=', 'value' => (string) $shirtsId],
+        ]);
+
+        $ids = array_map(fn($r) => $r['id'], $builder->getResults());
+        self::assertContains($hat, $ids);
+        self::assertContains($noCat, $ids);
+        self::assertNotContains($shirt, $ids);
+    }
+
+    public function test_apply_category_like_with_numeric_value_uses_name_path(): void
+    {
+        // When operator is LIKE and value happens to be a numeric string,
+        // it should still filter by t.name (backward compat).
+        // Create a category whose name IS the numeric string.
+        wp_insert_term('12345', 'product_cat');
+        wp_insert_term('999', 'product_cat');
+
+        $matchProduct = $this->createProductWithTerms('Numeric Cat Match', ['product_cat' => ['12345']]);
+        $this->createProductWithTerms('Other Product', ['product_cat' => ['999']]);
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => 'LIKE', 'value' => '12345'],
+        ]);
+
+        $results = $builder->getResults();
+        $ids = array_map(fn($r) => $r['id'], $results);
+        self::assertContains($matchProduct, $ids);
+    }
+
+    public function test_apply_tag_equal_by_term_id(): void
+    {
+        $summerTerm = wp_insert_term('SummerTagByID', 'product_tag');
+        wp_insert_term('WinterTagByID', 'product_tag');
+
+        self::assertIsArray($summerTerm);
+        $summerId = (int) $summerTerm['term_id'];
+
+        $summerProduct = $this->createProductWithTermsByIds('Summer Product', ['product_tag' => [$summerId]]);
+        $winterProduct = $this->createProductWithTerms('Winter Product', ['product_tag' => ['WinterTagByID']]);
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'tags', 'operator' => '=', 'value' => (string) $summerId],
+        ]);
+
+        $results = $builder->getResults();
+        $ids = array_map(fn($r) => $r['id'], $results);
+        self::assertContains($summerProduct, $ids);
+        self::assertNotContains($winterProduct, $ids);
+    }
+
+    // --- Hierarchical category filtering (subcategory expansion) ---
+
+    public function test_apply_category_equal_by_term_id_includes_child_term_products(): void
+    {
+        // Create parent "Belysning" and child "Lampor".
+        $belysningTerm = wp_insert_term('Belysning', 'product_cat');
+        self::assertIsArray($belysningTerm);
+        $belysningId = (int) $belysningTerm['term_id'];
+
+        $lamporTerm = wp_insert_term('Lampor', 'product_cat', ['parent' => $belysningId]);
+        self::assertIsArray($lamporTerm);
+        $lamporId = (int) $lamporTerm['term_id'];
+
+        $directParent = $this->createProductWithTermsByIds('Direct Parent Product', ['product_cat' => [$belysningId]]);
+        $childProduct  = $this->createProductWithTermsByIds('Child Product', ['product_cat' => [$lamporId]]);
+
+        $this->primeHierarchyCache('product_cat');
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => '=', 'value' => (string) $belysningId],
+        ]);
+
+        $results = $builder->getResults();
+        $ids = array_map(fn($r) => $r['id'], $results);
+
+        self::assertContains($directParent, $ids, 'Product directly in Belysning must be returned');
+        self::assertContains($childProduct, $ids, 'Product in child category Lampor must also be returned');
+    }
+
+    public function test_apply_category_equal_by_term_id_excludes_sibling_branches(): void
+    {
+        $belysningTerm = wp_insert_term('BelysningExcl', 'product_cat');
+        self::assertIsArray($belysningTerm);
+        $belysningId = (int) $belysningTerm['term_id'];
+
+        $lamporTerm = wp_insert_term('LamporExcl', 'product_cat', ['parent' => $belysningId]);
+        self::assertIsArray($lamporTerm);
+        $lamporId = (int) $lamporTerm['term_id'];
+
+        $hatsTerm = wp_insert_term('HatsExcl', 'product_cat');
+        self::assertIsArray($hatsTerm);
+        $hatsId = (int) $hatsTerm['term_id'];
+
+        $lamporProduct = $this->createProductWithTermsByIds('Lampor Product', ['product_cat' => [$lamporId]]);
+        $hatsProduct   = $this->createProductWithTermsByIds('Hats Product', ['product_cat' => [$hatsId]]);
+
+        $this->primeHierarchyCache('product_cat');
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => '=', 'value' => (string) $belysningId],
+        ]);
+
+        $ids = array_map(fn($r) => $r['id'], $builder->getResults());
+
+        self::assertContains($lamporProduct, $ids, 'Child-category product must be included');
+        self::assertNotContains($hatsProduct, $ids, 'Unrelated-branch product must be excluded');
+    }
+
+    public function test_apply_category_not_equal_by_term_id_excludes_descendants(): void
+    {
+        $belysningTerm = wp_insert_term('BelysningNEQ', 'product_cat');
+        self::assertIsArray($belysningTerm);
+        $belysningId = (int) $belysningTerm['term_id'];
+
+        $lamporTerm = wp_insert_term('LamporNEQ', 'product_cat', ['parent' => $belysningId]);
+        self::assertIsArray($lamporTerm);
+        $lamporId = (int) $lamporTerm['term_id'];
+
+        $hatsTerm = wp_insert_term('HatsNEQ2', 'product_cat');
+        self::assertIsArray($hatsTerm);
+        $hatsId = (int) $hatsTerm['term_id'];
+
+        $parentProduct = $this->createProductWithTermsByIds('Belysning Product NEQ', ['product_cat' => [$belysningId]]);
+        $childProduct  = $this->createProductWithTermsByIds('Lampor Product NEQ', ['product_cat' => [$lamporId]]);
+        $hatsProduct   = $this->createProductWithTermsByIds('Hats Product NEQ', ['product_cat' => [$hatsId]]);
+
+        $this->primeHierarchyCache('product_cat');
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => '!=', 'value' => (string) $belysningId],
+        ]);
+
+        $ids = array_map(fn($r) => $r['id'], $builder->getResults());
+
+        self::assertContains($hatsProduct, $ids, 'Unrelated product must be returned by != filter');
+        self::assertNotContains($parentProduct, $ids, 'Direct parent-category product must be excluded');
+        self::assertNotContains($childProduct, $ids, 'Child-category product must also be excluded');
+    }
+
+    public function test_apply_category_equal_by_term_id_leaf_with_no_children_still_matches(): void
+    {
+        // A leaf term has no children; behavior should be identical to original single-term path.
+        $leafTerm = wp_insert_term('LeafOnly', 'product_cat');
+        self::assertIsArray($leafTerm);
+        $leafId = (int) $leafTerm['term_id'];
+
+        $leafProduct = $this->createProductWithTermsByIds('Leaf Product', ['product_cat' => [$leafId]]);
+        $this->createProductWithTerms('Other Product Leaf', ['product_cat' => ['OtherLeaf']]);
+
+        $this->primeHierarchyCache('product_cat');
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => '=', 'value' => (string) $leafId],
+        ]);
+
+        $results = $builder->getResults();
+        $ids = array_map(fn($r) => $r['id'], $results);
+
+        self::assertCount(1, $results, 'Exactly one product should match the leaf term');
+        self::assertContains($leafProduct, $ids);
+    }
+
+    public function test_apply_category_equal_by_term_id_deep_multi_level_hierarchy(): void
+    {
+        // Three levels: Belysning → Lampor → LED
+        $belysningTerm = wp_insert_term('BelysningDeep', 'product_cat');
+        self::assertIsArray($belysningTerm);
+        $belysningId = (int) $belysningTerm['term_id'];
+
+        $lamporTerm = wp_insert_term('LamporDeep', 'product_cat', ['parent' => $belysningId]);
+        self::assertIsArray($lamporTerm);
+        $lamporId = (int) $lamporTerm['term_id'];
+
+        $ledTerm = wp_insert_term('LEDDeep', 'product_cat', ['parent' => $lamporId]);
+        self::assertIsArray($ledTerm);
+        $ledId = (int) $ledTerm['term_id'];
+
+        $level1Product = $this->createProductWithTermsByIds('Level 1 Product', ['product_cat' => [$belysningId]]);
+        $level2Product = $this->createProductWithTermsByIds('Level 2 Product', ['product_cat' => [$lamporId]]);
+        $level3Product = $this->createProductWithTermsByIds('Level 3 Product', ['product_cat' => [$ledId]]);
+
+        $this->primeHierarchyCache('product_cat');
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => '=', 'value' => (string) $belysningId],
+        ]);
+
+        $results = $builder->getResults();
+        $ids = array_map(fn($r) => $r['id'], $results);
+
+        self::assertContains($level1Product, $ids, 'Level 1 (direct) product must be returned');
+        self::assertContains($level2Product, $ids, 'Level 2 (child) product must be returned');
+        self::assertContains($level3Product, $ids, 'Level 3 (grandchild) product must be returned');
+    }
+
+    /**
+     * Helper: clear the WordPress hierarchy cache for a taxonomy so that
+     * get_term_children() returns fresh results after inserting new terms.
+     */
+    private function primeHierarchyCache(string $taxonomy): void
+    {
+        delete_option($taxonomy . '_children');
+        wp_cache_delete($taxonomy . '_children', 'terms');
+    }
+
     /**
      * Helper: create a product post directly via wp_insert_post.
      */
@@ -312,6 +564,22 @@ final class FilterParserTest extends WP_UnitTestCase
                     $termIds[] = (int) $term['term_id'];
                 }
             }
+            wp_set_object_terms($id, $termIds, $taxonomy);
+        }
+
+        return $id;
+    }
+
+    /**
+     * Helper: create a product with pre-existing term IDs (avoids name lookup).
+     *
+     * @param array<string, list<int>> $termsByTaxonomy taxonomy => list of term_ids
+     */
+    private function createProductWithTermsByIds(string $title, array $termsByTaxonomy = []): int
+    {
+        $id = $this->createProduct($title);
+
+        foreach ($termsByTaxonomy as $taxonomy => $termIds) {
             wp_set_object_terms($id, $termIds, $taxonomy);
         }
 

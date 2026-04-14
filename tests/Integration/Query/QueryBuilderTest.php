@@ -349,6 +349,58 @@ final class QueryBuilderTest extends WP_UnitTestCase
         self::assertSame($heavy, $results[0]['id']);
     }
 
+    // --- addTaxonomyTermIdCondition (hierarchical term-id path) ---
+
+    public function test_addTaxonomyTermIdCondition_filters_by_multiple_term_ids(): void
+    {
+        $termA = wp_insert_term('CatA', 'product_cat');
+        $termB = wp_insert_term('CatB', 'product_cat');
+        self::assertIsArray($termA);
+        self::assertIsArray($termB);
+
+        $idA = (int) $termA['term_id'];
+        $idB = (int) $termB['term_id'];
+
+        $productA = $this->createProductWithTerms('Product in A', ['product_cat' => ['CatA']]);
+        $productB = $this->createProductWithTerms('Product in B', ['product_cat' => ['CatB']]);
+        $this->createProductWithTerms('Product in Hats', ['product_cat' => ['HatsTermId']]);
+
+        $builder = new QueryBuilder();
+        $builder->addTaxonomyTermIdCondition('product_cat', [$idA, $idB], false);
+        $results = $builder->getResults();
+        $ids = array_map(fn($r) => $r['id'], $results);
+
+        self::assertContains($productA, $ids, 'Product in CatA must be returned');
+        self::assertContains($productB, $ids, 'Product in CatB must be returned');
+        self::assertCount(2, $results, 'Only products in CatA or CatB must be returned');
+    }
+
+    public function test_addTaxonomyTermIdCondition_negated_excludes_all_listed_ids(): void
+    {
+        $termA = wp_insert_term('NegCatA', 'product_cat');
+        $termB = wp_insert_term('NegCatB', 'product_cat');
+        $termH = wp_insert_term('NegHats', 'product_cat');
+        self::assertIsArray($termA);
+        self::assertIsArray($termB);
+        self::assertIsArray($termH);
+
+        $idA = (int) $termA['term_id'];
+        $idB = (int) $termB['term_id'];
+
+        $productA    = $this->createProductWithTerms('Neg Product A', ['product_cat' => ['NegCatA']]);
+        $productB    = $this->createProductWithTerms('Neg Product B', ['product_cat' => ['NegCatB']]);
+        $productHats = $this->createProductWithTerms('Neg Product Hats', ['product_cat' => ['NegHats']]);
+
+        $builder = new QueryBuilder();
+        $builder->addTaxonomyTermIdCondition('product_cat', [$idA, $idB], true);
+        $results = $builder->getResults();
+        $ids = array_map(fn($r) => $r['id'], $results);
+
+        self::assertContains($productHats, $ids, 'Unrelated product must be returned');
+        self::assertNotContains($productA, $ids, 'Product in NegCatA must be excluded');
+        self::assertNotContains($productB, $ids, 'Product in NegCatB must be excluded');
+    }
+
     /**
      * Helper: create a product post directly via wp_insert_post.
      *

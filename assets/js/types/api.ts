@@ -316,6 +316,22 @@ export const DeleteSavedFilterResponseSchema = z.object( {
 } );
 export type DeleteSavedFilterResponse = z.infer< typeof DeleteSavedFilterResponseSchema >;
 
+// ── Taxonomy Term Detail (Issue #45 — TaxonomyTermPicker) ────
+export const TaxonomyTermDetailSchema = z.object( {
+	id: z.number(),
+	name: z.string(),
+	slug: z.string(),
+	count: z.number(),
+	parent: z.number(),
+} );
+export type TaxonomyTermDetail = z.infer< typeof TaxonomyTermDetailSchema >;
+
+export const TaxonomyTermsResponseSchema = z.object( {
+	items: z.array( TaxonomyTermDetailSchema ),
+	total: z.number(),
+} );
+export type TaxonomyTermsResponse = z.infer< typeof TaxonomyTermsResponseSchema >;
+
 // ── API Error ────────────────────────────────────────────────
 export const ApiErrorDataSchema = z
 	.object( {

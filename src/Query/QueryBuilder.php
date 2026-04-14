@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace IhumbakWooBulkEdit\Query;
 
+use IhumbakWooBulkEdit\Fields\TaxonomyMap;
+
 /**
  * Builds native SQL queries for product filtering.
  *
@@ -64,19 +66,8 @@ final class QueryBuilder
         'catalog_visibility' => '_visibility',
     ];
 
-    /**
-     * Maps field keys to WordPress taxonomy slugs.
-     *
-     * Filtering on these fields is done via IN/NOT IN subqueries against
-     * wp_term_relationships to avoid JOIN row multiplication.
-     *
-     * TODO: integration point for custom taxonomies (Brands, etc.) — see Integrations roadmap.
-     */
-    private const TAXONOMIES = [
-        'categories'     => 'product_cat',
-        'tags'           => 'product_tag',
-        'shipping_class' => 'product_shipping_class',
-    ];
+    // NOTE: The taxonomy map has been extracted to TaxonomyMap (Issue #45).
+    // getTaxonomyName() and isTaxonomyField() now delegate to TaxonomyMap.
 
     /**
      * Add a WHERE condition for a post column.
@@ -180,19 +171,23 @@ final class QueryBuilder
     /**
      * Get the WordPress taxonomy slug for a field key.
      *
+     * Delegates to TaxonomyMap — single source of truth (Issue #45).
+     *
      * @return string|null Taxonomy slug (e.g. "product_cat"), or null if the field is not a taxonomy.
      */
     public function getTaxonomyName(string $fieldKey): ?string
     {
-        return self::TAXONOMIES[$fieldKey] ?? null;
+        return TaxonomyMap::taxonomyForField($fieldKey);
     }
 
     /**
      * Check if a field is a taxonomy field.
+     *
+     * Delegates to TaxonomyMap — single source of truth (Issue #45).
      */
     public function isTaxonomyField(string $fieldKey): bool
     {
-        return isset(self::TAXONOMIES[$fieldKey]);
+        return TaxonomyMap::isTaxonomyField($fieldKey);
     }
 
     /**
@@ -229,6 +224,54 @@ final class QueryBuilder
         $this->conditions[] = [
             'sql'    => $sql,
             'values' => array_merge([$taxonomy], $values),
+        ];
+
+        return $this;
+    }
+
+    /**
+     * Add a WHERE condition that matches products whose terms in $taxonomy
+     * have a term_id in the given list.
+     *
+     * Unlike addTaxonomyCondition() — which JOINs wp_terms for name matching —
+     * this method operates entirely on wp_term_taxonomy.tt.term_id, so no extra
+     * wp_terms JOIN is needed.  Used by the hierarchical-category path in
+     * FilterParser where a numeric term_id is expanded to include all descendants
+     * before calling this method.
+     *
+     * Emits:
+     *   p.ID {NOT} IN (
+     *       SELECT tr.object_id
+     *       FROM wp_term_relationships tr
+     *       INNER JOIN wp_term_taxonomy tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+     *       WHERE tt.taxonomy = %s AND tt.term_id IN (%d, %d, …)
+     *   )
+     *
+     * @param string    $taxonomy WP taxonomy slug (e.g. "product_cat")
+     * @param list<int> $termIds  One or more term IDs to match; method is a no-op if empty
+     * @param bool      $negate   If true, wrap with NOT IN
+     */
+    public function addTaxonomyTermIdCondition(string $taxonomy, array $termIds, bool $negate): self
+    {
+        if (empty($termIds)) {
+            return $this;
+        }
+
+        global $wpdb;
+
+        $not          = $negate ? 'NOT ' : '';
+        $placeholders = implode(', ', array_fill(0, count($termIds), '%d'));
+
+        $sql = "p.ID {$not}IN (
+            SELECT tr.object_id
+            FROM {$wpdb->term_relationships} tr
+            INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+            WHERE tt.taxonomy = %s AND tt.term_id IN ({$placeholders})
+        )";
+
+        $this->conditions[] = [
+            'sql'    => $sql,
+            'values' => array_merge([$taxonomy], $termIds),
         ];
 
         return $this;

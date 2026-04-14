@@ -10,6 +10,7 @@ use IhumbakWooBulkEdit\Api\ChangelogController;
 use IhumbakWooBulkEdit\Api\FieldsController;
 use IhumbakWooBulkEdit\Api\FiltersController;
 use IhumbakWooBulkEdit\Api\ProductsController;
+use IhumbakWooBulkEdit\Api\TaxonomyTermsController;
 use IhumbakWooBulkEdit\Api\VariationsController;
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
 use IhumbakWooBulkEdit\Operations\BulkDelete;
@@ -236,6 +237,13 @@ final class Plugin
                 $c->get(CapabilityChecker::class),
             )
         );
+
+        $this->container->set(
+            TaxonomyTermsController::class,
+            static fn (Container $c): TaxonomyTermsController => new TaxonomyTermsController(
+                $c->get(CapabilityChecker::class),
+            )
+        );
     }
 
     private function registerHooks(): void
@@ -268,6 +276,10 @@ final class Plugin
             /** @var FiltersController $filters */
             $filters = $this->container->get(FiltersController::class);
             $filters->register_routes();
+
+            /** @var TaxonomyTermsController $taxonomyTerms */
+            $taxonomyTerms = $this->container->get(TaxonomyTermsController::class);
+            $taxonomyTerms->register_routes();
         });
 
         // Ensure schema is up-to-date on upgrade (no-op if versions match).

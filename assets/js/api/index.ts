@@ -14,3 +14,5 @@ export {
 	updateSavedFilter,
 	deleteSavedFilter,
 } from './savedFilters';
+export { fetchTaxonomyTerms } from './taxonomyTerms';
+export type { FetchTaxonomyTermsParams } from './taxonomyTerms';

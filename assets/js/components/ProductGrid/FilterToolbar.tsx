@@ -1,7 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { __ } from '@wordpress/i18n';
-import type { Field, ProductFilter, FilterOperator, SavedFilterDefinition } from '@/types/api';
+import type { Field, ProductFilter, FilterOperator, SavedFilterDefinition, TaxonomyTermDetail } from '@/types/api';
 import { SavedFiltersMenu } from './SavedFiltersMenu';
+import { TaxonomyTermPicker } from './TaxonomyTermPicker';
+import { useTaxonomyTermLabels } from '@/hooks/useTaxonomyTerms';
 
 interface FilterToolbarProps {
 	fields: Field[];
@@ -34,6 +36,9 @@ const ALL_OPERATORS: FilterOperator[] = [
 
 const UNARY_OPERATORS: FilterOperator[] = [ 'IS EMPTY', 'IS NOT EMPTY' ];
 
+/** Operators for which taxonomy fields should use the term picker (ID-based). */
+const TAXONOMY_ID_OPERATORS: FilterOperator[] = [ '=', '!=' ];
+
 type DropdownStep = 'closed' | 'field' | 'operator' | 'value';
 
 export function FilterToolbar( {
@@ -55,6 +60,9 @@ export function FilterToolbar( {
 
 	const filterableFields = fields.filter( ( f ) => f.filterable );
 
+	// Resolve term names for ID-based taxonomy chip labels.
+	const termLabels = useTaxonomyTermLabels( filters, fields );
+
 	// Close dropdown on outside click
 	useEffect( () => {
 		function handleClickOutside( event: MouseEvent ) {
@@ -73,7 +81,7 @@ export function FilterToolbar( {
 		};
 	}, [ dropdownStep ] );
 
-	// Focus value input when step changes to value
+	// Focus value input when step changes to value (for text input path).
 	useEffect( () => {
 		if ( dropdownStep === 'value' && valueInputRef.current ) {
 			valueInputRef.current.focus();
@@ -134,6 +142,22 @@ export function FilterToolbar( {
 		[ handleValueSubmit, resetDropdown ]
 	);
 
+	// Called when TaxonomyTermPicker selects a term.
+	const handleTermSelect = useCallback(
+		( term: TaxonomyTermDetail ) => {
+			if ( selectedField && selectedOperator ) {
+				onAddFilter( {
+					field: selectedField.key,
+					operator: selectedOperator,
+					// Store the term_id as a string — backend will detect numeric = ID path.
+					value: String( term.id ),
+				} );
+				resetDropdown();
+			}
+		},
+		[ selectedField, selectedOperator, onAddFilter, resetDropdown ]
+	);
+
 	const getFieldLabel = ( fieldKey: string ): string => {
 		const field = fields.find( ( f ) => f.key === fieldKey );
 		return field?.label ?? fieldKey;
@@ -141,6 +165,28 @@ export function FilterToolbar( {
 
 	const getOperatorLabel = ( operator: FilterOperator ): string => {
 		return OPERATOR_LABELS[ operator ] ?? operator;
+	};
+
+	/**
+	 * Resolve the display value for a filter chip.
+	 *
+	 * For taxonomy fields with = or != and a numeric ID, look up the term name
+	 * from the label map. Fall back to the raw value if not yet loaded.
+	 */
+	const getChipValue = ( filter: ProductFilter ): string => {
+		if ( filter.value === undefined ) return '';
+
+		const field = fields.find( ( f ) => f.key === filter.field );
+		if (
+			field?.type === 'taxonomy' &&
+			TAXONOMY_ID_OPERATORS.includes( filter.operator ) &&
+			/^\d+$/.test( filter.value )
+		) {
+			const label = termLabels[ `${ filter.field }:${ filter.value }` ];
+			return label ?? filter.value;
+		}
+
+		return filter.value;
 	};
 
 	const renderSelectOptions = ( field: Field ): JSX.Element => {
@@ -166,6 +212,65 @@ export function FilterToolbar( {
 						{ label }
 					</button>
 				) ) }
+			</div>
+		);
+	};
+
+	/**
+	 * Render the value step of the filter dropdown.
+	 *
+	 * - For taxonomy fields with = / !=: render TaxonomyTermPicker
+	 * - For taxonomy fields with LIKE / NOT LIKE: classic text input
+	 * - For select fields: option list
+	 * - Default: numeric or text input
+	 */
+	const renderValueStep = (): JSX.Element | null => {
+		if ( ! selectedField || ! selectedOperator ) return null;
+
+		const isTaxonomy = selectedField.type === 'taxonomy';
+		const isTaxonomyIdOp = TAXONOMY_ID_OPERATORS.includes( selectedOperator );
+
+		if ( isTaxonomy && isTaxonomyIdOp ) {
+			return (
+				<div className="iwbe-filter-dropdown-value">
+					<TaxonomyTermPicker
+						fieldKey={ selectedField.key }
+						onSelect={ handleTermSelect }
+						onCancel={ resetDropdown }
+					/>
+				</div>
+			);
+		}
+
+		if ( selectedField.type === 'select' ) {
+			return renderSelectOptions( selectedField );
+		}
+
+		return (
+			<div className="iwbe-filter-dropdown-value">
+				<input
+					ref={ valueInputRef }
+					type={
+						selectedField.type === 'number' ||
+						selectedField.type === 'price' ||
+						selectedField.type === 'integer'
+							? 'number'
+							: 'text'
+					}
+					className="iwbe-filter-value-input"
+					placeholder={ __( 'Enter value…', 'ihumbak-woo-bulk-edit' ) }
+					value={ filterValue }
+					onChange={ ( e ) => setFilterValue( e.target.value ) }
+					onKeyDown={ handleValueKeyDown }
+				/>
+				<button
+					type="button"
+					className="iwbe-filter-value-submit"
+					onClick={ handleValueSubmit }
+					disabled={ ! filterValue.trim() }
+				>
+					{ __( 'Apply', 'ihumbak-woo-bulk-edit' ) }
+				</button>
 			</div>
 		);
 	};
@@ -256,40 +361,7 @@ export function FilterToolbar( {
 											{ selectedField.label }{ ' ' }
 											{ getOperatorLabel( selectedOperator ) }
 										</div>
-										{ selectedField.type === 'select' ? (
-											renderSelectOptions( selectedField )
-										) : (
-											<div className="iwbe-filter-dropdown-value">
-												<input
-													ref={ valueInputRef }
-													type={
-														selectedField.type === 'number' ||
-														selectedField.type === 'price' ||
-														selectedField.type === 'integer'
-															? 'number'
-															: 'text'
-													}
-													className="iwbe-filter-value-input"
-													placeholder={ __(
-														'Enter value…',
-														'ihumbak-woo-bulk-edit'
-													) }
-													value={ filterValue }
-													onChange={ ( e ) =>
-														setFilterValue( e.target.value )
-													}
-													onKeyDown={ handleValueKeyDown }
-												/>
-												<button
-													type="button"
-													className="iwbe-filter-value-submit"
-													onClick={ handleValueSubmit }
-													disabled={ ! filterValue.trim() }
-												>
-													{ __( 'Apply', 'ihumbak-woo-bulk-edit' ) }
-												</button>
-											</div>
-										) }
+										{ renderValueStep() }
 									</>
 								) }
 						</div>
@@ -325,7 +397,7 @@ export function FilterToolbar( {
 							</span>
 							{ filter.value !== undefined && (
 								<span className="iwbe-chip-value">
-									{ filter.value }
+									{ getChipValue( filter ) }
 								</span>
 							) }
 							<button
