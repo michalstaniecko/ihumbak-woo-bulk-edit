@@ -110,6 +110,7 @@ export function createColumns(
 		id: 'select',
 		size: 40,
 		enableSorting: false,
+		enableHiding: false,
 		meta: { isSelection: true } as SelectionColumnMeta,
 	};
 
@@ -119,6 +120,7 @@ export function createColumns(
 		header: __( 'ID', 'ihumbak-woo-bulk-edit' ),
 		size: 60,
 		enableSorting: true,
+		enableHiding: false,
 	};
 
 	const fieldColumns: ColumnDef< Product, unknown >[] = fields.map(
@@ -128,6 +130,7 @@ export function createColumns(
 			header: field.label,
 			size: COLUMN_WIDTHS[ field.type ] ?? 150,
 			enableSorting: field.sortable,
+			enableHiding: true,
 			meta: { field } as FieldColumnMeta,
 		} )
 	);

@@ -4,6 +4,7 @@ import type { Field, ProductFilter, FilterOperator, SavedFilterDefinition, Taxon
 import { SavedFiltersMenu } from './SavedFiltersMenu';
 import { TaxonomyTermPicker } from './TaxonomyTermPicker';
 import { useTaxonomyTermLabels } from '@/hooks/useTaxonomyTerms';
+import { ColumnVisibilityMenu } from './ColumnVisibilityMenu';
 
 interface FilterToolbarProps {
 	fields: Field[];
@@ -373,6 +374,8 @@ export function FilterToolbar( {
 					currentSearch={ searchQuery }
 					onApplyPreset={ onApplyPreset }
 				/>
+
+				<ColumnVisibilityMenu fields={ fields } />
 
 				{ filters.length > 0 && (
 					<button

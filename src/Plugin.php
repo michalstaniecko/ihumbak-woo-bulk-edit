@@ -11,6 +11,7 @@ use IhumbakWooBulkEdit\Api\FieldsController;
 use IhumbakWooBulkEdit\Api\FiltersController;
 use IhumbakWooBulkEdit\Api\ProductsController;
 use IhumbakWooBulkEdit\Api\TaxonomyTermsController;
+use IhumbakWooBulkEdit\Api\UserPreferencesController;
 use IhumbakWooBulkEdit\Api\VariationsController;
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
 use IhumbakWooBulkEdit\Operations\BulkDelete;
@@ -20,6 +21,7 @@ use IhumbakWooBulkEdit\Persistence\ChangeLogRepository;
 use IhumbakWooBulkEdit\Persistence\DatabaseMigrator;
 use IhumbakWooBulkEdit\Persistence\ProductSaver;
 use IhumbakWooBulkEdit\Persistence\SavedFiltersRepository;
+use IhumbakWooBulkEdit\Persistence\UserPreferencesRepository;
 use IhumbakWooBulkEdit\Query\VariationsRepository;
 use IhumbakWooBulkEdit\Security\CapabilityChecker;
 use IhumbakWooBulkEdit\Security\RateLimiter;
@@ -244,6 +246,19 @@ final class Plugin
                 $c->get(CapabilityChecker::class),
             )
         );
+
+        $this->container->set(
+            UserPreferencesRepository::class,
+            static fn (Container $c): UserPreferencesRepository => new UserPreferencesRepository()
+        );
+
+        $this->container->set(
+            UserPreferencesController::class,
+            static fn (Container $c): UserPreferencesController => new UserPreferencesController(
+                $c->get(UserPreferencesRepository::class),
+                $c->get(CapabilityChecker::class),
+            )
+        );
     }
 
     private function registerHooks(): void
@@ -280,6 +295,10 @@ final class Plugin
             /** @var TaxonomyTermsController $taxonomyTerms */
             $taxonomyTerms = $this->container->get(TaxonomyTermsController::class);
             $taxonomyTerms->register_routes();
+
+            /** @var UserPreferencesController $userPreferences */
+            $userPreferences = $this->container->get(UserPreferencesController::class);
+            $userPreferences->register_routes();
         });
 
         // Ensure schema is up-to-date on upgrade (no-op if versions match).

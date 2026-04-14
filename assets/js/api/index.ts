@@ -16,3 +16,8 @@ export {
 } from './savedFilters';
 export { fetchTaxonomyTerms } from './taxonomyTerms';
 export type { FetchTaxonomyTermsParams } from './taxonomyTerms';
+export {
+	fetchColumnVisibility,
+	updateColumnVisibility,
+	resetColumnVisibility,
+} from './userPreferences';

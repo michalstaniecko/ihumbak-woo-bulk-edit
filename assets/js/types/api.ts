@@ -332,6 +332,13 @@ export const TaxonomyTermsResponseSchema = z.object( {
 } );
 export type TaxonomyTermsResponse = z.infer< typeof TaxonomyTermsResponseSchema >;
 
+// ── Column Visibility Preferences (Issue #47) ─────────────────
+export const ColumnVisibilityPreferenceSchema = z.object( {
+	hidden: z.array( z.string() ),
+	version: z.number().int(),
+} );
+export type ColumnVisibilityPreference = z.infer< typeof ColumnVisibilityPreferenceSchema >;
+
 // ── API Error ────────────────────────────────────────────────
 export const ApiErrorDataSchema = z
 	.object( {

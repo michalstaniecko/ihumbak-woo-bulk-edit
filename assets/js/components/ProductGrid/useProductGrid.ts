@@ -6,6 +6,7 @@ import {
 import type {
 	SortingState,
 	RowSelectionState,
+	VisibilityState,
 	OnChangeFn,
 	Table,
 	Row,
@@ -17,7 +18,8 @@ import { createColumns } from './columnFactory';
 import type { GridPaginationState } from '@/types/grid';
 import type { Field, Product, ProductFilter, Sort, VariationsResponse, SavedFilterDefinition } from '@/types/api';
 // VariationsResponse is used by the variationsMap type in the return shape.
-import { useExpansionStore, useFiltersStore } from '@/store';
+import { useExpansionStore, useFiltersStore, useColumnVisibilityStore } from '@/store';
+import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 
 export interface UseProductGridReturn {
 	table: Table< Product >;
@@ -61,6 +63,37 @@ export function useProductGrid(): UseProductGridReturn {
 		perPage: 50,
 	} );
 	const [ rowSelection, setRowSelection ] = useState< RowSelectionState >( {} );
+
+	// Column visibility — server-synced via useColumnVisibility hook
+	const { hidden } = useColumnVisibility();
+	const setHidden = useColumnVisibilityStore( ( s ) => s.setHidden );
+
+	// Derive TanStack VisibilityState from the Zustand hidden Set
+	// TanStack uses { columnId: boolean } — false means hidden
+	const columnVisibility = useMemo< VisibilityState >( () => {
+		const state: VisibilityState = {};
+		for ( const id of hidden ) {
+			state[ id ] = false;
+		}
+		return state;
+	}, [ hidden ] );
+
+	const handleColumnVisibilityChange: OnChangeFn< VisibilityState > = useCallback(
+		( updater ) => {
+			const newState =
+				typeof updater === 'function'
+					? updater( columnVisibility )
+					: updater;
+
+			// Derive hidden array from TanStack visibility state
+			const newHidden = Object.entries( newState )
+				.filter( ( [ , visible ] ) => visible === false )
+				.map( ( [ id ] ) => id );
+
+			setHidden( newHidden );
+		},
+		[ columnVisibility, setHidden ]
+	);
 	const lastSelectedIndexRef = useRef< number | null >( null );
 
 	// Filter state — delegated to useFiltersStore so SavedFiltersMenu can call applyPreset
@@ -182,14 +215,17 @@ export function useProductGrid(): UseProductGridReturn {
 		state: {
 			sorting,
 			rowSelection,
+			columnVisibility,
 		},
 		onSortingChange: handleSortingChange,
 		onRowSelectionChange: handleRowSelectionChange,
+		onColumnVisibilityChange: handleColumnVisibilityChange,
 		getCoreRowModel: getCoreRowModel(),
 		manualSorting: true,
 		manualPagination: true,
 		enableRowSelection: true,
 		enableMultiRowSelection: true,
+		enableHiding: true,
 		getRowId: ( row ) => String( row.id ),
 	} );
 

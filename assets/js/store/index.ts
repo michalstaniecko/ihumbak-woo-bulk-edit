@@ -6,3 +6,4 @@ export { useExpansionStore } from './useExpansionStore';
 export { useFiltersStore } from './useFiltersStore';
 export { useRecentFiltersStore } from './useRecentFiltersStore';
 export type { RecentFilterEntry } from './useRecentFiltersStore';
+export { useColumnVisibilityStore, PINNED_COLUMN_IDS, DEFAULT_VISIBLE_COLUMNS } from './useColumnVisibilityStore';
