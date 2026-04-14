@@ -11,7 +11,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 
 ## Implementation Status
 
-**Overall progress: ~85% — Backend MVP + persistence + audit log + bulk delete/duplicate complete; frontend grid with inline editing (parent + variations), batch save, taxonomy filtering, change history drawer, client-side bulk operations modal per field type, and destructive-action confirm modals all working.**
+**Overall progress: ~90% — Backend MVP + persistence + audit log + bulk delete/duplicate + saved filter presets complete; frontend grid with inline editing (parent + variations), batch save, taxonomy filtering, change history drawer, client-side bulk operations modal per field type, destructive-action confirm modals, and filter save/load UI all working.**
 
 ### Done (Backend MVP)
 - Plugin bootstrap with HPOS compatibility declaration
@@ -100,17 +100,26 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - `useBatchSave` merges variation `post_modified` from React Query cache for optimistic locking
 - `ExpansionToggle` component for parent-row expand/collapse UI
 
+### Done (Frontend Saved Filter Presets — Issue #18)
+- `FiltersController` REST endpoint: `GET /filters` (list), `POST /filters` (create), `PUT /filters/{id}` (update), `DELETE /filters/{id}` (delete)
+- `SavedFiltersRepository` CRUD layer (insert/update/delete/listForUser); max 100 filters per user; supports shared filters (user_id=0, is_shared=1)
+- Database table `wbm_saved_filters` created via `DatabaseMigrator` schema v1.1.0 (id, user_id, name, definition JSON, is_shared, created_at, updated_at timestamps)
+- Frontend: `SavedFiltersMenu` component (dropdown with load/save/edit/delete UI) + `SaveFilterDialog` modal for naming/sharing
+- Zustand stores: `useFiltersStore` (active filters state with applyPreset method), `useRecentFiltersStore` (tracks recent user selections)
+- React Query hooks: `useSavedFilters`, `useCreateSavedFilter`, `useUpdateSavedFilter`, `useDeleteSavedFilter`
+- API client: `api/savedFilters.ts` with fully typed Zod schemas (`SavedFilter`, `SavedFilterDefinition`, create/update/delete payloads)
+- Tests: `SavedFiltersRepositoryTest` (CRUD operations, user isolation, shared filter handling), `FiltersControllerTest` (all 4 HTTP routes with permission checks), `api/__tests__/savedFilters.test.ts` (client payload shapes)
+
 ### Done (Tests — partial)
 - PHPUnit scaffolding with Unit + Integration suites
 - Unit tests: `ContainerTest`, `FieldRegistryTest`, `FieldTypeTest`, all 6 core field tests (Name/Sku/RegularPrice/SalePrice/StockQuantity/Status), `QueryBuilderTest`, all 6 operator tests
-- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest` (includes batch save tests with real products, nonexistent-ID error handling, and optimistic-lock conflict detection via stale `post_modified`), `ProductsControllerDeleteTest`, `ProductsControllerDuplicateTest`, `ProductsControllerVariationsTest` (Issue #15 — variation endpoint CRUD), `VariationsControllerTest`, `VariationsRepositoryTest`, `ProductSaverVariationTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`, `DatabaseMigratorTest`, `ChangeLogRepositoryTest`, `ChangelogControllerTest`
+- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest` (includes batch save tests with real products, nonexistent-ID error handling, and optimistic-lock conflict detection via stale `post_modified`), `ProductsControllerDeleteTest`, `ProductsControllerDuplicateTest`, `ProductsControllerVariationsTest` (Issue #15 — variation endpoint CRUD), `VariationsControllerTest`, `VariationsRepositoryTest`, `ProductSaverVariationTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`, `DatabaseMigratorTest`, `ChangeLogRepositoryTest`, `ChangelogControllerTest`, `FiltersControllerTest`, `SavedFiltersRepositoryTest`
 - Integration test bootstrap (`tests/Integration/bootstrap.php`) loads WooCommerce **before** the plugin under test so tests that instantiate `WC_Product` no longer error with "Class not found"
-- Frontend: Vitest configured; `useChangesStore.test.ts` (store coverage), `ProductGrid/__tests__/bulkOperations.test.ts` (all bulk operation appliers including sale-price base-value path), `bulkDuplicate/__tests__/BulkDuplicateConfirmModal.test.tsx` (modal interaction), `store/__tests__/useExpansionStore.test.ts` (expand/collapse state), `ProductGrid/__tests__/expansion.test.ts` (variation row display and editing), and `api/__tests__/bulkDeleteProducts.test.ts` / `bulkDuplicateProducts.test.ts` (API client payloads)
+- Frontend: Vitest configured; `useChangesStore.test.ts` (store coverage), `ProductGrid/__tests__/bulkOperations.test.ts` (all bulk operation appliers including sale-price base-value path), `bulkDuplicate/__tests__/BulkDuplicateConfirmModal.test.tsx` (modal interaction), `store/__tests__/useExpansionStore.test.ts` (expand/collapse state), `store/__tests__/useFiltersStore.test.ts` (filters state), `store/__tests__/useRecentFiltersStore.test.ts` (recent filters tracking), `ProductGrid/__tests__/expansion.test.ts` (variation row display and editing), and `api/__tests__/bulkDeleteProducts.test.ts` / `bulkDuplicateProducts.test.ts` / `savedFilters.test.ts` (API client payloads)
 - E2E: directory exists, no Playwright tests yet
 
 ### Not Yet Implemented
 - PHP operation classes for **edit** — Issues #17, #31. `src/Operations/` currently holds `BulkDelete` and `BulkDuplicate`; a server-side math/text engine would be needed for a dedicated `POST /products/bulk-operation` endpoint (current bulk *edit* ops are still computed in the browser and committed via `PUT /products/batch`)
-- Filters CRUD endpoints (`GET|POST|PUT|DELETE /filters`) — Issue #18
 - Export/Import endpoints — Issue #22
 - Extended operators + AND/OR logic — Issue #19
 - Integration modules (WPML, Yoast, ACF, etc.) — Issues #21, #26, #27
@@ -179,7 +188,8 @@ ihumbak-woo-bulk-edit/
 │   │   ├── FieldsController.php  # GET /fields endpoint
 │   │   ├── ProductsController.php # query / batch / delete / duplicate endpoints
 │   │   ├── VariationsController.php # GET /products/{id}/variations endpoint
-│   │   └── ChangelogController.php # GET /changelog endpoint
+│   │   ├── ChangelogController.php # GET /changelog endpoint
+│   │   └── FiltersController.php # GET|POST|PUT|DELETE /filters endpoints (Issue #18)
 │   ├── Query/
 │   │   ├── QueryBuilder.php      # Native SQL builder with dynamic JOINs + taxonomy subqueries; filters post_type='product', hydrates type + variations_count
 │   │   ├── FilterParser.php      # Parses filter JSON, branches post-col / meta / taxonomy
@@ -219,7 +229,8 @@ ihumbak-woo-bulk-edit/
 │   │   ├── ProductSaver.php      # Per-product save via WC CRUD with validation; guards variation status to publish/private only
 │   │   ├── BatchSaver.php        # Batch orchestrator, optimistic locking, transient cleanup
 │   │   ├── DatabaseMigrator.php  # Versioned dbDelta, wbm_db_version option
-│   │   └── ChangeLogRepository.php # Audit log insert/logBatch/query/purgeOlderThan
+│   │   ├── ChangeLogRepository.php # Audit log insert/logBatch/query/purgeOlderThan
+│   │   └── SavedFiltersRepository.php # CRUD for user-saved filter presets (Issue #18)
 │   ├── Integrations/             # (empty — planned)
 │   ├── Security/
 │   │   ├── CapabilityChecker.php # read/write/delete/manage checks
@@ -246,6 +257,10 @@ ihumbak-woo-bulk-edit/
 │   │   │       ├── Pagination.tsx        # Page controls + per-page select
 │   │   │       ├── StatusBar.tsx         # Total/selected count, save progress
 │   │   │       ├── FilterToolbar.tsx     # Search, add-filter dropdown, chips
+│   │   │       ├── SavedFiltersMenu/
+│   │   │       │   ├── SavedFiltersMenu.tsx   # Dropdown menu for loading saved filter presets (Issue #18)
+│   │   │       │   ├── SaveFilterDialog.tsx   # Modal for saving current filters with name & share option
+│   │   │       │   └── index.ts
 │   │   │       ├── LoadingSkeleton.tsx   # Animated skeleton loader
 │   │   │       ├── validation.ts         # Cell-level validation with pending changes
 │   │   │       ├── bulkOperations.ts     # Pure operation engine (numeric/text/boolean/taxonomy appliers)
@@ -279,9 +294,11 @@ ihumbak-woo-bulk-edit/
 │   │   │   ├── products.ts       # fetchProducts, batchSaveProducts, bulkDeleteProducts, bulkDuplicateProducts
 │   │   │   ├── fields.ts         # fetchFields function
 │   │   │   ├── changelog.ts      # fetchChangelog function
+│   │   │   ├── savedFilters.ts   # getSavedFilters, createSavedFilter, updateSavedFilter, deleteSavedFilter (Issue #18)
 │   │   │   ├── __tests__/
 │   │   │   │   ├── bulkDeleteProducts.test.ts
-│   │   │   │   └── bulkDuplicateProducts.test.ts
+│   │   │   │   ├── bulkDuplicateProducts.test.ts
+│   │   │   │   └── savedFilters.test.ts
 │   │   │   └── index.ts          # Barrel export
 │   │   ├── hooks/
 │   │   │   ├── useProducts.ts           # React Query hook (keepPreviousData)
@@ -291,6 +308,7 @@ ihumbak-woo-bulk-edit/
 │   │   │   ├── useBulkDelete.ts         # DELETE /products/batch mutation
 │   │   │   ├── useBulkDuplicate.ts      # POST /products/duplicate mutation
 │   │   │   ├── useChangelog.ts          # React Query hook for audit log
+│   │   │   ├── useSavedFilters.ts       # useQuery + useMutation hooks for GET|POST|PUT|DELETE /filters (Issue #18)
 │   │   │   ├── useGridKeyboardNav.ts    # Arrow keys + Enter navigation
 │   │   │   ├── useUndoRedoShortcuts.ts  # Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z
 │   │   │   └── index.ts          # Barrel export
@@ -302,9 +320,13 @@ ihumbak-woo-bulk-edit/
 │   │       ├── useChangesStore.ts  # Change tracking with undo/redo
 │   │       ├── useEditingStore.ts  # Cell editing UI state
 │   │       ├── useExpansionStore.ts # Parent product expand/collapse state
+│   │       ├── useFiltersStore.ts  # Filter list + search state with preset loading (Issue #18)
+│   │       ├── useRecentFiltersStore.ts # Recent filter selections for quick recall (Issue #18)
 │   │       ├── __tests__/
 │   │       │   ├── useChangesStore.test.ts  # Vitest store coverage
-│   │       │   └── useExpansionStore.test.ts # Expansion store coverage
+│   │       │   ├── useExpansionStore.test.ts # Expansion store coverage
+│   │       │   ├── useFiltersStore.test.ts  # Filters state with applyPreset
+│   │       │   └── useRecentFiltersStore.test.ts # Recent filters tracking
 │   │       └── index.ts           # Barrel export
 │   ├── css/
 │   │   └── product-grid.css      # Grid styles (WC admin aesthetic)
@@ -320,7 +342,9 @@ ihumbak-woo-bulk-edit/
 
 ## Custom Database Tables
 
-- `{prefix}wbm_saved_filters` — user saved filters (id, user_id, name, definition JSON, is_shared, timestamps)
+Schema version: `1.1.0` (via `DatabaseMigrator::SCHEMA_VERSION`)
+
+- `{prefix}wbm_saved_filters` — user saved filters (id, user_id, name, definition JSON blob, is_shared boolean, created_at, updated_at). Row belongs to a user (user_id > 0) or is team-shared (user_id = 0, is_shared = 1). Max 100 filters per user.
 - `{prefix}wbm_change_log` — audit log (id, user_id, product_id, field, old_value JSON, new_value JSON, changed_at)
 
 Created via `Persistence\DatabaseMigrator` (`dbDelta`) on activation and on every boot when `wbm_db_version` differs from `DatabaseMigrator::SCHEMA_VERSION`. `uninstall.php` drops both tables, deletes `wbm_db_version` / `wbm_changelog_retention_days`, and clears the rotation cron.
@@ -359,7 +383,10 @@ Endpoints and status:
 | `POST` | `/products/duplicate` | Implemented (Issue #41 — wraps WC core duplicator, `copy_meta`/`copy_images` flags, max 100 IDs/req, audit-logged as `_duplicated`) |
 | `GET` | `/changelog` | Implemented (filters, pagination) |
 | `POST` | `/products/bulk-operation` | Not implemented — bulk ops currently run client-side in `bulkOperations.ts`, commit via `PUT /products/batch`. A server-side endpoint is only needed for datasets too large for browser iteration |
-| `GET\|POST\|PUT\|DELETE` | `/filters` | Planned (Issue #18) |
+| `GET` | `/filters` | Implemented (Issue #18 — `FiltersController`, list filters visible to current user) |
+| `POST` | `/filters` | Implemented (Issue #18 — create new filter preset) |
+| `PUT` | `/filters/{id}` | Implemented (Issue #18 — update existing filter) |
+| `DELETE` | `/filters/{id}` | Implemented (Issue #18 — delete a filter) |
 | `POST` | `/export` | Planned (Issue #22) |
 | `POST` | `/import` | Planned (Issue #22) |
 | `GET` | `/import/status/{id}` | Planned (Issue #22) |
