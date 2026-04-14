@@ -6,6 +6,7 @@ namespace IhumbakWooBulkEdit\Persistence;
 
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
 use WC_Product;
+use WC_Product_Variation;
 use WP_Error;
 
 /**
@@ -15,6 +16,16 @@ use WP_Error;
  */
 final class ProductSaver
 {
+    /**
+     * Statuses allowed when editing a product_variation post.
+     * Variations may only be 'publish' or 'private'; other statuses (draft,
+     * pending, trash, future) do not make sense on variation posts and are
+     * rejected before touching the database.
+     *
+     * @var list<string>
+     */
+    public const VARIATION_ALLOWED_STATUSES = ['publish', 'private'];
+
     /**
      * Map of field keys to WC_Product setter methods.
      *
@@ -152,6 +163,24 @@ final class ProductSaver
             }
 
             $sanitized[$fieldKey] = $value;
+        }
+
+        // Guard: variations may only have 'publish' or 'private' status.
+        if (
+            $product instanceof WC_Product_Variation
+            && isset($sanitized['status'])
+            && ! in_array($sanitized['status'], self::VARIATION_ALLOWED_STATUSES, true)
+        ) {
+            return [
+                'status'  => 'error',
+                'code'    => 'wbm_invalid_variation_status',
+                'id'      => $productId,
+                'message' => sprintf(
+                    /* translators: %s: attempted status value */
+                    __('Variation status "%s" is not allowed. Use "publish" or "private".', 'ihumbak-woo-bulk-edit'),
+                    $sanitized['status']
+                ),
+            ];
         }
 
         // Capture old values (for audit log) and apply all changes.

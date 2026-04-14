@@ -44,6 +44,36 @@ export const TaxonomyTermSchema = z.object( {
 } );
 export type TaxonomyTerm = z.infer< typeof TaxonomyTermSchema >;
 
+// ── Variation ────────────────────────────────────────────────
+export const VariationSchema = z.object( {
+	id: z.number(),
+	parent_id: z.number(),
+	name: z.string(),
+	sku: z.string(),
+	regular_price: z.string(),
+	sale_price: z.string(),
+	stock_quantity: z.number().nullable(),
+	manage_stock: z.boolean(),
+	weight: z.string(),
+	length: z.string(),
+	width: z.string(),
+	height: z.string(),
+	thumbnail_id: z.number().nullable(),
+	status: z.string(),
+	menu_order: z.number(),
+	attributes: z.record( z.string(), z.string() ),
+	post_modified: z.string(),
+} );
+export type Variation = z.infer< typeof VariationSchema >;
+
+export const VariationsResponseSchema = z.object( {
+	parent_id: z.number(),
+	items: z.array( VariationSchema ),
+	total: z.number(),
+} );
+export type VariationsResponse = z.infer< typeof VariationsResponseSchema >;
+
+// ── Product ──────────────────────────────────────────────────
 export const ProductSchema = z.object( {
 	id: z.number(),
 	name: z.string(),
@@ -82,6 +112,10 @@ export const ProductSchema = z.object( {
 	cross_sells: z.array( z.number() ),
 	upsells: z.array( z.number() ),
 	post_modified: z.string(),
+	// Hydrated by the PHP backend in hydrateProducts(). Always present in
+	// /products/query responses since Issue #15.
+	type: z.string(),
+	variations_count: z.number(),
 } );
 export type Product = z.infer< typeof ProductSchema >;
 

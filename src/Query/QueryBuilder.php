@@ -282,9 +282,10 @@ final class QueryBuilder
     /**
      * Execute query and return product rows.
      *
+     * @param array<int, int> $variationCounts Optional parentId => count map (from VariationsRepository).
      * @return list<array<string, mixed>>
      */
-    public function getResults(): array
+    public function getResults(array $variationCounts = []): array
     {
         global $wpdb;
 
@@ -297,7 +298,7 @@ final class QueryBuilder
 
         $rows = $wpdb->get_results($sql, ARRAY_A) ?: [];
 
-        return $this->hydrateProducts($rows);
+        return $this->hydrateProducts($rows, $variationCounts);
     }
 
     private function buildSelectSql(): string
@@ -343,7 +344,7 @@ final class QueryBuilder
 
     private function buildWhere(): string
     {
-        $clauses = ["p.post_type IN ('product', 'product_variation')", "p.post_status != 'auto-draft'"];
+        $clauses = ["p.post_type = 'product'", "p.post_status != 'auto-draft'"];
 
         foreach ($this->conditions as $condition) {
             $clauses[] = $condition['sql'];
@@ -369,12 +370,13 @@ final class QueryBuilder
     }
 
     /**
-     * Hydrate raw DB rows with meta data.
+     * Hydrate raw DB rows with meta data, product type, and variation counts.
      *
      * @param list<array<string, mixed>> $rows
+     * @param array<int, int>            $variationCounts parentId => count
      * @return list<array<string, mixed>>
      */
-    private function hydrateProducts(array $rows): array
+    private function hydrateProducts(array $rows, array $variationCounts = []): array
     {
         if (empty($rows)) {
             return [];
@@ -435,6 +437,25 @@ final class QueryBuilder
             ];
         }
 
+        // Fetch product type from the 'product_type' term taxonomy.
+        $typeRows = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT tr.object_id, t.slug AS product_type
+                 FROM {$wpdb->term_relationships} tr
+                 INNER JOIN {$wpdb->term_taxonomy} tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
+                 INNER JOIN {$wpdb->terms} t ON tt.term_id = t.term_id
+                 WHERE tr.object_id IN ({$placeholders})
+                 AND tt.taxonomy = 'product_type'",
+                ...$ids
+            ),
+            ARRAY_A
+        ) ?: [];
+
+        $typeMap = [];
+        foreach ($typeRows as $typeRow) {
+            $typeMap[(int) $typeRow['object_id']] = $typeRow['product_type'];
+        }
+
         $products = [];
         foreach ($rows as $row) {
             $id = (int) $row['ID'];
@@ -493,6 +514,8 @@ final class QueryBuilder
                 'cross_sells'        => $crossSellIds,
                 'upsells'            => $upsellIds,
                 'post_modified'      => $row['post_modified'],
+                'type'               => $typeMap[$id] ?? 'simple',
+                'variations_count'   => $variationCounts[$id] ?? 0,
             ];
         }
 

@@ -6,6 +6,7 @@ namespace IhumbakWooBulkEdit\Api;
 
 use IhumbakWooBulkEdit\Query\QueryBuilder;
 use IhumbakWooBulkEdit\Query\FilterParser;
+use IhumbakWooBulkEdit\Query\VariationsRepository;
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
 use IhumbakWooBulkEdit\Operations\BulkDelete;
 use IhumbakWooBulkEdit\Operations\BulkDuplicate;
@@ -31,6 +32,7 @@ final class ProductsController extends RestController
         private readonly BatchSaver $batchSaver,
         private readonly BulkDelete $bulkDelete,
         private readonly BulkDuplicate $bulkDuplicate,
+        private readonly VariationsRepository $variationsRepository = new VariationsRepository(),
     ) {}
 
     public function register_routes(): void
@@ -100,7 +102,21 @@ final class ProductsController extends RestController
         $builder->paginate($page, $perPage);
 
         $total = $builder->getTotal();
+
+        // First pass: fetch products without variation counts (avoids a
+        // chicken-and-egg problem — we need IDs before we can count variations).
         $products = $builder->getResults();
+
+        // Second pass: hydrate variation counts now that we have product IDs.
+        if (! empty($products)) {
+            $productIds = array_column($products, 'id');
+            $variationCounts = $this->variationsRepository->countsByParents($productIds);
+
+            foreach ($products as &$product) {
+                $product['variations_count'] = $variationCounts[$product['id']] ?? 0;
+            }
+            unset($product);
+        }
 
         return $this->success([
             'items'    => $products,

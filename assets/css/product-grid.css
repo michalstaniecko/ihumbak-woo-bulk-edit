@@ -1253,3 +1253,75 @@
 	color: #a7aaad;
 	cursor: not-allowed;
 }
+
+/* ── Expansion toggle (variable product rows) ─────────────── */
+
+.iwbe-expansion-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	padding: 1px 4px;
+	margin-left: 4px;
+	background: none;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	cursor: pointer;
+	font-size: 11px;
+	color: #50575e;
+	line-height: 1;
+	vertical-align: middle;
+}
+
+.iwbe-expansion-toggle:hover {
+	background-color: #f0f0f1;
+	border-color: #a7aaad;
+	color: #2c3338;
+}
+
+.iwbe-expansion-toggle--open {
+	background-color: #f0f6fc;
+	border-color: #2271b1;
+	color: #2271b1;
+}
+
+.iwbe-expansion-toggle__icon {
+	font-size: 9px;
+}
+
+.iwbe-expansion-toggle__count {
+	font-weight: 600;
+}
+
+.iwbe-expansion-toggle__spinner {
+	display: inline-block;
+	width: 10px;
+	height: 10px;
+	border: 2px solid #c3c4c7;
+	border-top-color: #2271b1;
+	border-radius: 50%;
+	animation: iwbe-spin 0.6s linear infinite;
+}
+
+@keyframes iwbe-spin {
+	to { transform: rotate( 360deg ); }
+}
+
+/* ── Variation rows ───────────────────────────────────────── */
+
+.iwbe-row-variation {
+	background-color: #f9f9f9;
+	border-left: 3px solid #2271b1;
+}
+
+.iwbe-row-variation:hover {
+	background-color: #f0f6fc;
+}
+
+.iwbe-td-variation-indent {
+	background-color: transparent;
+	border-right: 1px solid #e0e0e0;
+}
+
+.iwbe-td-variation-empty {
+	background-color: transparent;
+}

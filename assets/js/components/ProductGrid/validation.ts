@@ -1,15 +1,23 @@
 import { __, sprintf } from '@wordpress/i18n';
-import type { Field, Product } from '@/types/api';
+import type { Field } from '@/types/api';
 
 export interface ValidationResult {
 	valid: boolean;
 	message?: string;
 }
 
+/**
+ * Minimal product-like context needed for cross-field validation.
+ * Both `Product` and `Variation` satisfy this interface.
+ */
+export interface ValidatableProduct {
+	regular_price: string;
+}
+
 export function validateCellValue(
 	field: Field,
 	newValue: unknown,
-	currentProduct: Product,
+	currentProduct: ValidatableProduct,
 	pendingChanges: Record< string, unknown >
 ): ValidationResult {
 	const strVal = String( newValue ?? '' ).trim();

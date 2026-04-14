@@ -12,9 +12,12 @@ import type {
 } from '@tanstack/react-table';
 import { useProducts } from '@/hooks/useProducts';
 import { useFields } from '@/hooks/useFields';
+import { useVariations } from '@/hooks/useVariations';
 import { createColumns } from './columnFactory';
 import type { GridPaginationState } from '@/types/grid';
-import type { Field, Product, ProductFilter, Sort } from '@/types/api';
+import type { Field, Product, ProductFilter, Sort, VariationsResponse } from '@/types/api';
+// VariationsResponse is used by the variationsMap type in the return shape.
+import { useExpansionStore } from '@/store';
 
 export interface UseProductGridReturn {
 	table: Table< Product >;
@@ -35,6 +38,8 @@ export interface UseProductGridReturn {
 	onAddFilter: ( filter: ProductFilter ) => void;
 	onRemoveFilter: ( index: number ) => void;
 	onClearAllFilters: () => void;
+	expandedSet: Set< number >;
+	variationsMap: Map< number, VariationsResponse >;
 }
 
 function sortingStateToApiSort( sorting: SortingState ): Sort {
@@ -104,6 +109,18 @@ export function useProductGrid(): UseProductGridReturn {
 		setFilters( [] );
 		setSearchQuery( '' );
 	}, [] );
+
+	// Expansion state for variable products.
+	const expandedSet = useExpansionStore( ( s ) => s.expanded );
+
+	// Sort expanded IDs to keep useQueries hook count stable.
+	const expandedIds = useMemo(
+		() => [ ...expandedSet ].sort( ( a, b ) => a - b ),
+		[ expandedSet ]
+	);
+
+	// Fetch variations for all expanded parents in parallel.
+	const variationsMap = useVariations( expandedIds );
 
 	const { data: fields } = useFields();
 	const apiSort = useMemo( () => sortingStateToApiSort( sorting ), [ sorting ] );
@@ -218,5 +235,7 @@ export function useProductGrid(): UseProductGridReturn {
 		onAddFilter,
 		onRemoveFilter,
 		onClearAllFilters,
+		expandedSet,
+		variationsMap,
 	};
 }

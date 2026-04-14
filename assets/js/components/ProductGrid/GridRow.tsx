@@ -3,15 +3,18 @@ import type { Row } from '@tanstack/react-table';
 import type { Product } from '@/types/api';
 import type { SelectionColumnMeta, FieldColumnMeta } from './columnFactory';
 import { renderCellValue } from './columnFactory';
-import { useChangesStore, useEditingStore } from '@/store';
+import { useChangesStore, useEditingStore, useExpansionStore } from '@/store';
 import { getEditorForField } from './editors';
 import { validateCellValue } from './validation';
+import { ExpansionToggle } from './ExpansionToggle';
 
 interface GridRowProps {
 	row: Row< Product >;
 	style?: React.CSSProperties;
 	onRowClick: ( row: Row< Product >, event: React.MouseEvent ) => void;
 	columnWidths: number[];
+	isExpanded?: boolean;
+	isLoadingVariations?: boolean;
 }
 
 function isSelectionMeta( meta: unknown ): meta is SelectionColumnMeta {
@@ -37,9 +40,14 @@ export function GridRow( {
 	style,
 	onRowClick,
 	columnWidths,
+	isExpanded = false,
+	isLoadingVariations = false,
 }: GridRowProps ): JSX.Element {
 	const isSelected = row.getIsSelected();
 	const productId = row.original.id;
+	const isVariable = row.original.type === 'variable';
+
+	const toggleExpansion = useExpansionStore( ( s ) => s.toggle );
 
 	const activeCell = useEditingStore( ( s ) => s.activeCell );
 	const focusedCell = useEditingStore( ( s ) => s.focusedCell );
@@ -122,6 +130,18 @@ export function GridRow( {
 								onChange={ row.getToggleSelectedHandler() }
 								onClick={ ( e ) => e.stopPropagation() }
 							/>
+							{ isVariable && (
+								<ExpansionToggle
+									isExpanded={ isExpanded }
+									isLoading={ isLoadingVariations }
+									variationsCount={
+										row.original.variations_count
+									}
+									onToggle={ () =>
+										toggleExpansion( productId )
+									}
+								/>
+							) }
 						</div>
 					);
 				}

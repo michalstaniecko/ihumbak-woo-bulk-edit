@@ -36,6 +36,8 @@ export function ProductGrid(): JSX.Element {
 		onAddFilter,
 		onRemoveFilter,
 		onClearAllFilters,
+		expandedSet,
+		variationsMap,
 	} = useProductGrid();
 
 	const batchSave = useBatchSave();
@@ -100,6 +102,9 @@ export function ProductGrid(): JSX.Element {
 							table={ table }
 							columnWidths={ columnWidths }
 							page={ pagination.page }
+							fields={ fields }
+							expandedSet={ expandedSet }
+							variationsMap={ variationsMap }
 						/>
 					</div>
 				</div>

@@ -9,6 +9,7 @@ use IhumbakWooBulkEdit\Admin\AssetsLoader;
 use IhumbakWooBulkEdit\Api\ChangelogController;
 use IhumbakWooBulkEdit\Api\FieldsController;
 use IhumbakWooBulkEdit\Api\ProductsController;
+use IhumbakWooBulkEdit\Api\VariationsController;
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
 use IhumbakWooBulkEdit\Operations\BulkDelete;
 use IhumbakWooBulkEdit\Operations\BulkDuplicate;
@@ -16,6 +17,7 @@ use IhumbakWooBulkEdit\Persistence\BatchSaver;
 use IhumbakWooBulkEdit\Persistence\ChangeLogRepository;
 use IhumbakWooBulkEdit\Persistence\DatabaseMigrator;
 use IhumbakWooBulkEdit\Persistence\ProductSaver;
+use IhumbakWooBulkEdit\Query\VariationsRepository;
 use IhumbakWooBulkEdit\Security\CapabilityChecker;
 use IhumbakWooBulkEdit\Security\RateLimiter;
 
@@ -184,6 +186,11 @@ final class Plugin
         );
 
         $this->container->set(
+            VariationsRepository::class,
+            static fn (Container $c): VariationsRepository => new VariationsRepository()
+        );
+
+        $this->container->set(
             ProductsController::class,
             static fn (Container $c): ProductsController => new ProductsController(
                 $c->get(FieldRegistry::class),
@@ -192,6 +199,15 @@ final class Plugin
                 $c->get(BatchSaver::class),
                 $c->get(BulkDelete::class),
                 $c->get(BulkDuplicate::class),
+                $c->get(VariationsRepository::class),
+            )
+        );
+
+        $this->container->set(
+            VariationsController::class,
+            static fn (Container $c): VariationsController => new VariationsController(
+                $c->get(VariationsRepository::class),
+                $c->get(CapabilityChecker::class),
             )
         );
 
@@ -227,6 +243,10 @@ final class Plugin
             /** @var ChangelogController $changelog */
             $changelog = $this->container->get(ChangelogController::class);
             $changelog->register_routes();
+
+            /** @var VariationsController $variations */
+            $variations = $this->container->get(VariationsController::class);
+            $variations->register_routes();
         });
 
         // Ensure schema is up-to-date on upgrade (no-op if versions match).

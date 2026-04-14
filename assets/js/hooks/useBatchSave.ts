@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { batchSave } from '@/api/products';
 import { useChangesStore } from '@/store';
 import { useEditingStore } from '@/store';
-import type { BatchSaveItem, BatchSaveResult } from '@/types/api';
+import type { BatchSaveItem, BatchSaveResult, VariationsResponse } from '@/types/api';
 import type { Product } from '@/types/api';
 
 const MAX_RETRIES = 3;
@@ -52,10 +52,22 @@ export function useBatchSave(): UseBatchSaveReturn {
 		async ( products: Product[] ) => {
 			stopEditing();
 
-			// Build a product lookup map for post_modified.
-			const productMap = new Map< number, Product >();
+			// Build a post_modified lookup map — includes both parent products
+			// and their variations (so optimistic locking works for variation edits).
+			const productMap = new Map< number, string >();
 			for ( const product of products ) {
-				productMap.set( product.id, product );
+				productMap.set( product.id, product.post_modified );
+			}
+
+			// Also merge variation post_modified from React Query cache.
+			const variationCaches =
+				queryClient.getQueriesData< VariationsResponse >( {
+					queryKey: [ 'variations' ],
+				} );
+			for ( const [ , cache ] of variationCaches ) {
+				for ( const v of cache?.items ?? [] ) {
+					productMap.set( v.id, v.post_modified );
+				}
 			}
 
 			// Convert ChangeMap to flat BatchSaveItem array.
@@ -64,8 +76,8 @@ export function useBatchSave(): UseBatchSaveReturn {
 				changes
 			) ) {
 				const productId = Number( productIdStr );
-				const product = productMap.get( productId );
-				if ( ! product ) {
+				const postModified = productMap.get( productId );
+				if ( ! postModified ) {
 					continue;
 				}
 
@@ -76,7 +88,7 @@ export function useBatchSave(): UseBatchSaveReturn {
 						id: productId,
 						field,
 						value: change.newValue,
-						post_modified: product.post_modified,
+						post_modified: postModified,
 					} );
 				}
 			}
@@ -224,6 +236,10 @@ export function useBatchSave(): UseBatchSaveReturn {
 				discardAll();
 				await queryClient.invalidateQueries( {
 					queryKey: [ 'products' ],
+				} );
+				// Invalidate variation caches so expanded rows reflect the new data.
+				await queryClient.invalidateQueries( {
+					queryKey: [ 'variations' ],
 				} );
 			}
 		},
