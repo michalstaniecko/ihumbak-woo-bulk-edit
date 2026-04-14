@@ -144,25 +144,32 @@ final class FilterParser
         }
 
         // term_id path (Issue #45 + hierarchical fix): when operator is = or != AND
-        // value is a non-empty numeric string, filter by term_id instead of t.name.
+        // value is a canonical positive-integer string (no leading zeros, no '0'),
+        // filter by term_id instead of t.name.
         // This is how the TaxonomyTermPicker passes IDs selected from the combobox.
         // We expand the selected term_id to include all descendant term IDs so that
         // products in child categories are also matched (hierarchical taxonomies like
-        // product_cat).  For non-hierarchical taxonomies or leaf terms,
-        // get_term_children() returns [] and the behaviour is identical to before.
+        // product_cat).  For flat taxonomies (product_tag, product_shipping_class)
+        // get_term_children() is skipped entirely; the filter matches only the
+        // exact term_id supplied.
         // LIKE / NOT LIKE always use the name path (backward compatibility).
+        // Values of '0' or strings with leading zeros (e.g. '0123') do not match
+        // the regex and fall through to the name path below.
         if (
             in_array($operatorId, ['=', '!='], true)
             && is_string($value)
             && $value !== ''
-            && ctype_digit($value)
+            && preg_match('/^[1-9]\d*$/', $value) === 1
         ) {
             $termId   = (int) $value;
-            $children = get_term_children($termId, $taxonomy);
             $expanded = [$termId];
 
-            if (is_array($children) && ! empty($children)) {
-                $expanded = array_merge($expanded, array_map('intval', $children));
+            // Only hierarchical taxonomies can have descendant terms.
+            if (is_taxonomy_hierarchical($taxonomy)) {
+                $children = get_term_children($termId, $taxonomy);
+                if (is_array($children) && ! empty($children)) {
+                    $expanded = array_merge($expanded, array_map('intval', $children));
+                }
             }
 
             // Deduplicate and drop any invalid IDs that may have crept in.

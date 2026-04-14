@@ -520,6 +520,90 @@ final class FilterParserTest extends WP_UnitTestCase
         self::assertContains($level3Product, $ids, 'Level 3 (grandchild) product must be returned');
     }
 
+    // --- Zero / leading-zero value falls through to name path (strict regex guard) ---
+
+    public function test_apply_category_equal_with_zero_string_value_uses_name_path(): void
+    {
+        // '0' is not a valid term_id (IDs start at 1), so the filter must use the
+        // name path and match the category whose literal name is '0'.
+        $zeroTerm = wp_insert_term('0', 'product_cat');
+        wp_insert_term('NotZero', 'product_cat');
+
+        self::assertIsArray($zeroTerm);
+
+        $zeroProduct    = $this->createProductWithTerms('Zero Cat Product', ['product_cat' => ['0']]);
+        $notZeroProduct = $this->createProductWithTerms('NotZero Cat Product', ['product_cat' => ['NotZero']]);
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => '=', 'value' => '0'],
+        ]);
+
+        $ids = array_map(fn($r) => $r['id'], $builder->getResults());
+        self::assertContains($zeroProduct, $ids, 'Product in category named "0" must be returned via name path');
+        self::assertNotContains($notZeroProduct, $ids, 'Product in "NotZero" category must not be returned');
+    }
+
+    public function test_apply_category_equal_with_leading_zero_numeric_value_uses_name_path(): void
+    {
+        // '0123' starts with '0' so it is not a canonical term_id string.
+        // Filter must fall through to the name path.
+        $lzTerm = wp_insert_term('0123', 'product_cat');
+        wp_insert_term('UnrelatedLZ', 'product_cat');
+
+        self::assertIsArray($lzTerm);
+
+        $lzProduct         = $this->createProductWithTerms('LeadingZero Product', ['product_cat' => ['0123']]);
+        $unrelatedProduct  = $this->createProductWithTerms('Unrelated LZ Product', ['product_cat' => ['UnrelatedLZ']]);
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => '=', 'value' => '0123'],
+        ]);
+
+        $ids = array_map(fn($r) => $r['id'], $builder->getResults());
+        self::assertContains($lzProduct, $ids, 'Product in category named "0123" must be returned via name path');
+        self::assertNotContains($unrelatedProduct, $ids, 'Product in "UnrelatedLZ" must not be returned');
+    }
+
+    public function test_apply_category_not_equal_with_zero_string_value_uses_name_path(): void
+    {
+        // != '0' via name path: products NOT in the '0' category are returned.
+        wp_insert_term('0', 'product_cat');
+        wp_insert_term('KeepMeZero', 'product_cat');
+
+        $zeroProduct    = $this->createProductWithTerms('Zero NEQ Product', ['product_cat' => ['0']]);
+        $keepMeProduct  = $this->createProductWithTerms('KeepMe NEQ Product', ['product_cat' => ['KeepMeZero']]);
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => '!=', 'value' => '0'],
+        ]);
+
+        $ids = array_map(fn($r) => $r['id'], $builder->getResults());
+        self::assertContains($keepMeProduct, $ids, 'Product in "KeepMeZero" must be returned by != "0" filter');
+        self::assertNotContains($zeroProduct, $ids, 'Product in category "0" must be excluded');
+    }
+
+    public function test_apply_category_not_equal_with_leading_zero_value_uses_name_path(): void
+    {
+        // != '0123' via name path.
+        wp_insert_term('0123', 'product_cat');
+        wp_insert_term('UnrelatedNE', 'product_cat');
+
+        $lzProduct         = $this->createProductWithTerms('LeadingZero NEQ Product', ['product_cat' => ['0123']]);
+        $unrelatedProduct  = $this->createProductWithTerms('Unrelated NE Product', ['product_cat' => ['UnrelatedNE']]);
+
+        $builder = new QueryBuilder();
+        $this->parser->apply($builder, [
+            ['field' => 'categories', 'operator' => '!=', 'value' => '0123'],
+        ]);
+
+        $ids = array_map(fn($r) => $r['id'], $builder->getResults());
+        self::assertContains($unrelatedProduct, $ids, 'Product in "UnrelatedNE" must be returned by != "0123" filter');
+        self::assertNotContains($lzProduct, $ids, 'Product in category "0123" must be excluded');
+    }
+
     /**
      * Helper: clear the WordPress hierarchy cache for a taxonomy so that
      * get_term_children() returns fresh results after inserting new terms.
