@@ -46,7 +46,7 @@ final class FieldsControllerTest extends WP_UnitTestCase
         self::assertSame(200, $response->get_status());
     }
 
-    public function test_get_fields_returns_six_fields(): void
+    public function test_get_fields_returns_all_registered_fields(): void
     {
         wp_set_current_user($this->createCapableUser());
 
@@ -55,7 +55,13 @@ final class FieldsControllerTest extends WP_UnitTestCase
         $data = $response->get_data();
 
         self::assertIsArray($data);
-        self::assertCount(6, $data);
+
+        $registry = new FieldRegistry();
+        self::assertCount(count($registry->getAll()), $data);
+        self::assertSame(
+            array_keys($registry->getAll()),
+            array_column($data, 'key')
+        );
     }
 
     public function test_get_fields_unauthenticated_returns_error(): void

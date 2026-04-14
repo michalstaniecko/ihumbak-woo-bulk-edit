@@ -12,6 +12,38 @@ use PHPUnit\Framework\TestCase;
 
 final class FieldRegistryTest extends TestCase
 {
+    /**
+     * Expected set of core field keys registered by FieldRegistry::registerCoreFields().
+     *
+     * Kept in the same order as registration in src/Fields/FieldRegistry.php so
+     * tests stay in sync with the production registration order. Assertions that
+     * don't care about order use assertEqualsCanonicalizing.
+     */
+    private const EXPECTED_CORE_KEYS = [
+        // Identifiers & basic info.
+        'name', 'slug', 'sku', 'status', 'catalog_visibility', 'featured', 'date_created',
+        // Descriptions.
+        'description', 'short_description',
+        // Pricing.
+        'regular_price', 'sale_price',
+        // Stock & inventory.
+        'manage_stock', 'stock_quantity', 'backorders', 'sold_individually',
+        // Dimensions & shipping.
+        'weight', 'length', 'width', 'height', 'shipping_class',
+        // Downloadable & virtual.
+        'virtual', 'downloadable', 'download_limit', 'download_expiry',
+        // External product.
+        'external_url', 'button_text',
+        // Taxonomy.
+        'categories', 'tags',
+        // Images.
+        'thumbnail', 'gallery',
+        // Linked products.
+        'cross_sells', 'upsells',
+        // Meta.
+        'purchase_note', 'reviews_allowed', 'menu_order',
+    ];
+
     private FieldRegistry $registry;
 
     protected function setUp(): void
@@ -19,9 +51,12 @@ final class FieldRegistryTest extends TestCase
         $this->registry = new FieldRegistry();
     }
 
-    public function test_constructor_registers_six_core_fields(): void
+    public function test_constructor_registers_expected_core_fields(): void
     {
-        self::assertCount(6, $this->registry->getAll());
+        self::assertEqualsCanonicalizing(
+            self::EXPECTED_CORE_KEYS,
+            array_keys($this->registry->getAll())
+        );
     }
 
     public function test_constructor_registers_expected_keys(): void
@@ -51,26 +86,30 @@ final class FieldRegistryTest extends TestCase
 
     public function test_register_adds_custom_field(): void
     {
+        $initialCount = count($this->registry->getAll());
         $mock = $this->createMockField('custom_field');
 
         $this->registry->register($mock);
 
         self::assertSame($mock, $this->registry->get('custom_field'));
-        self::assertCount(7, $this->registry->getAll());
+        self::assertCount($initialCount + 1, $this->registry->getAll());
     }
 
     public function test_register_overwrites_existing_key(): void
     {
+        $initialCount = count($this->registry->getAll());
         $replacement = $this->createMockField('name');
 
         $this->registry->register($replacement);
 
         self::assertSame($replacement, $this->registry->get('name'));
-        self::assertCount(6, $this->registry->getAll());
+        self::assertCount($initialCount, $this->registry->getAll());
     }
 
     public function test_getEditable_excludes_non_editable(): void
     {
+        $initialEditableCount = count($this->registry->getEditable());
+
         $nonEditable = $this->createMock(FieldInterface::class);
         $nonEditable->method('getKey')->willReturn('readonly_field');
         $nonEditable->method('isEditable')->willReturn(false);
@@ -82,11 +121,13 @@ final class FieldRegistryTest extends TestCase
         $editable = $this->registry->getEditable();
 
         self::assertArrayNotHasKey('readonly_field', $editable);
-        self::assertCount(6, $editable); // original 6 are editable
+        self::assertCount($initialEditableCount, $editable);
     }
 
     public function test_getFilterable_excludes_non_filterable(): void
     {
+        $initialFilterableCount = count($this->registry->getFilterable());
+
         $nonFilterable = $this->createMock(FieldInterface::class);
         $nonFilterable->method('getKey')->willReturn('no_filter');
         $nonFilterable->method('isFilterable')->willReturn(false);
@@ -96,11 +137,13 @@ final class FieldRegistryTest extends TestCase
         $filterable = $this->registry->getFilterable();
 
         self::assertArrayNotHasKey('no_filter', $filterable);
-        self::assertCount(6, $filterable);
+        self::assertCount($initialFilterableCount, $filterable);
     }
 
     public function test_getSortable_excludes_non_sortable(): void
     {
+        $initialSortableCount = count($this->registry->getSortable());
+
         $nonSortable = $this->createMock(FieldInterface::class);
         $nonSortable->method('getKey')->willReturn('no_sort');
         $nonSortable->method('isSortable')->willReturn(false);
@@ -110,14 +153,14 @@ final class FieldRegistryTest extends TestCase
         $sortable = $this->registry->getSortable();
 
         self::assertArrayNotHasKey('no_sort', $sortable);
-        self::assertCount(6, $sortable);
+        self::assertCount($initialSortableCount, $sortable);
     }
 
     public function test_toArray_returns_list_of_arrays(): void
     {
         $result = $this->registry->toArray();
 
-        self::assertCount(6, $result);
+        self::assertCount(count($this->registry->getAll()), $result);
 
         foreach ($result as $item) {
             self::assertIsArray($item);

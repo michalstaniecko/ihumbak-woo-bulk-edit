@@ -11,7 +11,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 
 ## Implementation Status
 
-**Overall progress: ~75% — Backend MVP + persistence + audit log complete; frontend grid with inline editing, batch save, taxonomy filtering, change history drawer, and client-side bulk operations modal per field type all working.**
+**Overall progress: ~80% — Backend MVP + persistence + audit log + bulk delete/duplicate complete; frontend grid with inline editing, batch save, taxonomy filtering, change history drawer, client-side bulk operations modal per field type, and destructive-action confirm modals all working.**
 
 ### Done (Backend MVP)
 - Plugin bootstrap with HPOS compatibility declaration
@@ -21,7 +21,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
   - `GET /fields` — fully working, returns all registered fields with metadata
   - `POST /products/query` — fully working, filters/sorts/paginates via native SQL
   - `PUT /products/batch` — fully working (BatchSaver + ProductSaver, writes audit log)
-  - `DELETE /products/batch` — registered, stub (awaits BulkDelete, Issue #23)
+  - `DELETE /products/batch` — fully working (Issue #23 — `Operations\BulkDelete`; `trash` mode requires `edit_products`, `permanent` mode requires `delete_products` and cascades to variation children for variable products; route-level `permission_callback` enforces `delete_products` so there's a single authorization source of truth; every deletion writes a `_deleted` audit-log entry with a shallow pre-delete snapshot; response shape matches `BatchSaver::process()` with an extra `variation_errors` counter so `success + errors === total` holds at the parent level)
   - `POST /products/duplicate` — fully working (Issue #41 — `Operations\BulkDuplicate` wraps `WC_Admin_Duplicate_Product::product_duplicate()`; `copy_meta`/`copy_images` toggles; max 100 IDs/req; one audit-log entry per parent as `_duplicated` with `source_id`/`source_name`/`variations` count)
   - `GET /changelog` — fully working (filters: product_id, user_id, field, date_from, date_to; pagination)
 - Field system: FieldInterface, AbstractField, FieldType enum (11 types), FieldRegistry
@@ -67,12 +67,19 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - Keyboard navigation (`useGridKeyboardNav`), undo/redo shortcuts (`useUndoRedoShortcuts`)
 
 ### Done (Frontend Bulk Operations Modal — Issue #16, client-side)
-- `bulkOperations.ts` — pure operation engine with type-discriminated `NumericOperation` / `TextOperation` / `BooleanOperation` / `TaxonomyOperation` and applier functions
+- `bulkOperations.ts` — pure operation engine with type-discriminated `NumericOperation` / `TextOperation` / `BooleanOperation` / `TaxonomyOperation` and applier functions; `applyNumericOperation` accepts an optional `baseValue` so relative ops can be computed from a different field than the one being written
 - `bulkEdit/BulkEditModal.tsx` — modal triggered from column header dropdown in `HeaderRow`, dispatches to per-field-type form via `inferBulkOperationKind`
 - Per-type forms: `NumericBulkForm` (set, increase/decrease absolute & pct, round, clear), `TextBulkForm` (set, search-replace with case sensitivity, append, prepend, upper/lower/title/sentence case, clear), `BooleanBulkForm` (set true/false, toggle), `TaxonomyBulkForm` (add, remove, replace terms)
+- **Sale price base selector (Issue #37)** — for `sale_price`, `NumericBulkForm` exposes a "Base" selector so relative numeric operations (increase/decrease absolute & pct, round) can be computed from the product's current `regular_price` instead of its current `sale_price`. Rows with missing / non-finite `regular_price` are silently skipped, and `BulkEditModal` surfaces the skipped count via an accessible notice
 - Scope selector: "Selected rows (N)" or "All filtered results (M)" — the latter paginates through `/products/query` via `fetchAllFilteredProducts.ts` with progress callback
 - Preview-and-commit: operations are applied optimistically to `useChangesStore` (no direct save), flowing through the existing `PUT /products/batch` pipeline — so no new REST endpoint was needed
-- Vitest coverage in `__tests__/bulkOperations.test.ts` for every operation mode
+- Vitest coverage in `__tests__/bulkOperations.test.ts` for every operation mode (including the sale-price base-value path)
+
+### Done (Frontend Destructive Operations — Issues #23, #41)
+- `bulkDelete/BulkDeleteConfirmModal.tsx` — confirm modal for `DELETE /products/batch` with mode selector (trash / permanent), a type-`DELETE` safety gate for permanent mode, and a separate i18n'd message when `variation_errors > 0` so orphaned variations are surfaced to the operator
+- `bulkDuplicate/BulkDuplicateConfirmModal.tsx` — confirm modal for `POST /products/duplicate` with `copy_meta` / `copy_images` checkboxes; scope is **selected rows only** (no "all filtered" to avoid accidentally creating thousands of drafts); partial-failure banner
+- `useBulkDelete` / `useBulkDuplicate` React Query hooks; `api/products.ts` gains `bulkDeleteProducts` and `bulkDuplicateProducts`, each covered by Vitest in `api/__tests__/`
+- `ChangeHistoryPanel` renders `_deleted` and `_duplicated` audit events (duplicated entries link to both source and new draft)
 
 ### Done (Frontend Change History — Issue #24)
 - `api/changelog.ts` + `useChangelog` React Query hook, Zod-validated response
@@ -83,15 +90,15 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 ### Done (Tests — partial)
 - PHPUnit scaffolding with Unit + Integration suites
 - Unit tests: `ContainerTest`, `FieldRegistryTest`, `FieldTypeTest`, all 6 core field tests (Name/Sku/RegularPrice/SalePrice/StockQuantity/Status), `QueryBuilderTest`, all 6 operator tests
-- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`, `DatabaseMigratorTest`, `ChangeLogRepositoryTest`, `ChangelogControllerTest`
-- Frontend: Vitest configured; `useChangesStore.test.ts` (store coverage) and `ProductGrid/__tests__/bulkOperations.test.ts` (all bulk operation appliers)
+- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest`, `ProductsControllerDeleteTest`, `ProductsControllerDuplicateTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`, `DatabaseMigratorTest`, `ChangeLogRepositoryTest`, `ChangelogControllerTest`
+- Integration test bootstrap (`tests/Integration/bootstrap.php`) loads WooCommerce **before** the plugin under test so tests that instantiate `WC_Product` no longer error with "Class not found"
+- Frontend: Vitest configured; `useChangesStore.test.ts` (store coverage), `ProductGrid/__tests__/bulkOperations.test.ts` (all bulk operation appliers including sale-price base-value path), `bulkDuplicate/__tests__/BulkDuplicateConfirmModal.test.tsx` (modal interaction), and `api/__tests__/bulkDeleteProducts.test.ts` / `bulkDuplicateProducts.test.ts` (API client payloads)
 - E2E: directory exists, no Playwright tests yet
 
 ### Not Yet Implemented
-- PHP operation classes (`src/Operations/` is empty) — Issues #17, #31. Current bulk ops are computed in the browser; a server-side engine would be needed for massive datasets or for a dedicated `POST /products/bulk-operation` endpoint
+- PHP operation classes for **edit** — Issues #17, #31. `src/Operations/` currently holds `BulkDelete` and `BulkDuplicate`; a server-side math/text engine would be needed for a dedicated `POST /products/bulk-operation` endpoint (current bulk *edit* ops are still computed in the browser and committed via `PUT /products/batch`)
 - Filters CRUD endpoints (`GET|POST|PUT|DELETE /filters`) — Issue #18
 - Export/Import endpoints — Issue #22
-- `DELETE /products/batch` BulkDelete — Issue #23 (route registered, controller method returns a stub)
 - Extended operators + AND/OR logic — Issue #19
 - Variants inline editing — Issue #15
 - Integration modules (WPML, Yoast, ACF, etc.) — Issues #21, #26, #27
@@ -158,7 +165,7 @@ ihumbak-woo-bulk-edit/
 │   ├── Api/
 │   │   ├── RestController.php    # Abstract base (namespace, helpers)
 │   │   ├── FieldsController.php  # GET /fields endpoint
-│   │   ├── ProductsController.php # query/batch/delete endpoints
+│   │   ├── ProductsController.php # query / batch / delete / duplicate endpoints
 │   │   └── ChangelogController.php # GET /changelog endpoint
 │   ├── Query/
 │   │   ├── QueryBuilder.php      # Native SQL builder with dynamic JOINs + taxonomy subqueries
@@ -191,7 +198,9 @@ ihumbak-woo-bulk-edit/
 │   │   │   ├── ThumbnailField.php, GalleryField.php
 │   │   │   └── DateCreatedField.php
 │   │   └── Custom/               # (empty — prepared for custom meta fields)
-│   ├── Operations/               # (empty — planned)
+│   ├── Operations/
+│   │   ├── BulkDelete.php        # Trash / permanent delete with variation cascade, audit logging
+│   │   └── BulkDuplicate.php     # Wraps WC_Admin_Duplicate_Product, copy_meta/copy_images toggles, audit logging
 │   ├── Persistence/
 │   │   ├── ProductSaver.php      # Per-product save via WC CRUD with validation
 │   │   ├── BatchSaver.php        # Batch orchestrator, optimistic locking, transient cleanup
@@ -208,7 +217,7 @@ ihumbak-woo-bulk-edit/
 │   │   ├── components/
 │   │   │   ├── App.tsx           # Main app component, mounts ProductGrid + ChangeHistoryPanel
 │   │   │   ├── ChangeHistoryPanel/
-│   │   │   │   ├── ChangeHistoryPanel.tsx  # Drawer for audit log viewer (filters, pagination)
+│   │   │   │   ├── ChangeHistoryPanel.tsx  # Drawer for audit log viewer (filters, pagination); renders _deleted / _duplicated events
 │   │   │   │   └── index.ts
 │   │   │   └── ProductGrid/
 │   │   │       ├── ProductGrid.tsx       # Main grid container, scroll-container wrapper
@@ -224,12 +233,20 @@ ihumbak-woo-bulk-edit/
 │   │   │       ├── validation.ts         # Cell-level validation with pending changes
 │   │   │       ├── bulkOperations.ts     # Pure operation engine (numeric/text/boolean/taxonomy appliers)
 │   │   │       ├── bulkEdit/
-│   │   │       │   ├── BulkEditModal.tsx           # Modal shell, scope selector, form dispatch
-│   │   │       │   ├── NumericBulkForm.tsx         # Set/increase/decrease/pct/round/clear
+│   │   │       │   ├── BulkEditModal.tsx           # Modal shell, scope selector, form dispatch, skipped-rows notice
+│   │   │       │   ├── NumericBulkForm.tsx         # Set/increase/decrease/pct/round/clear + base selector for sale_price
 │   │   │       │   ├── TextBulkForm.tsx            # Set/search-replace/append/prepend/case/clear
 │   │   │       │   ├── BooleanBulkForm.tsx         # Set true/false/toggle
 │   │   │       │   ├── TaxonomyBulkForm.tsx        # Add/remove/replace terms
 │   │   │       │   ├── fetchAllFilteredProducts.ts # Paginate /products/query for "all filtered" scope
+│   │   │       │   └── index.ts
+│   │   │       ├── bulkDelete/
+│   │   │       │   ├── BulkDeleteConfirmModal.tsx  # Trash / permanent + type-DELETE safety gate + variation_errors notice
+│   │   │       │   └── index.ts
+│   │   │       ├── bulkDuplicate/
+│   │   │       │   ├── BulkDuplicateConfirmModal.tsx  # copy_meta / copy_images toggles, selected-rows-only scope
+│   │   │       │   ├── __tests__/
+│   │   │       │   │   └── BulkDuplicateConfirmModal.test.tsx
 │   │   │       │   └── index.ts
 │   │   │       ├── editors/
 │   │   │       │   ├── CellEditorProps.ts  # Shared editor prop contract
@@ -238,18 +255,23 @@ ihumbak-woo-bulk-edit/
 │   │   │       │   ├── SelectEditor.tsx    # Select/boolean editor
 │   │   │       │   └── index.ts            # getEditorForField factory
 │   │   │       ├── __tests__/
-│   │   │       │   └── bulkOperations.test.ts  # Vitest coverage for all operation modes
+│   │   │       │   └── bulkOperations.test.ts  # Vitest coverage for all operation modes (incl. sale-price base)
 │   │   │       └── index.ts              # Barrel export
 │   │   ├── api/
 │   │   │   ├── client.ts         # apiFetch wrapper, ApiError class
-│   │   │   ├── products.ts       # fetchProducts, batchSaveProducts
+│   │   │   ├── products.ts       # fetchProducts, batchSaveProducts, bulkDeleteProducts, bulkDuplicateProducts
 │   │   │   ├── fields.ts         # fetchFields function
 │   │   │   ├── changelog.ts      # fetchChangelog function
+│   │   │   ├── __tests__/
+│   │   │   │   ├── bulkDeleteProducts.test.ts
+│   │   │   │   └── bulkDuplicateProducts.test.ts
 │   │   │   └── index.ts          # Barrel export
 │   │   ├── hooks/
 │   │   │   ├── useProducts.ts           # React Query hook (keepPreviousData)
 │   │   │   ├── useFields.ts             # React Query hook
 │   │   │   ├── useBatchSave.ts          # Batch save orchestration with progress
+│   │   │   ├── useBulkDelete.ts         # DELETE /products/batch mutation
+│   │   │   ├── useBulkDuplicate.ts      # POST /products/duplicate mutation
 │   │   │   ├── useChangelog.ts          # React Query hook for audit log
 │   │   │   ├── useGridKeyboardNav.ts    # Arrow keys + Enter navigation
 │   │   │   ├── useUndoRedoShortcuts.ts  # Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z
@@ -312,7 +334,7 @@ Endpoints and status:
 | `GET` | `/fields` | Implemented |
 | `POST` | `/products/query` | Implemented |
 | `PUT` | `/products/batch` | Implemented (BatchSaver + ProductSaver, optimistic locking, writes audit log) |
-| `DELETE` | `/products/batch` | Stub (Issue #23) |
+| `DELETE` | `/products/batch` | Implemented (Issue #23 — `Operations\BulkDelete`, `mode=trash\|permanent`, route enforces `delete_products`, variation cascade for variable products, audit-logged as `_deleted`, `variation_errors` separate counter) |
 | `POST` | `/products/duplicate` | Implemented (Issue #41 — wraps WC core duplicator, `copy_meta`/`copy_images` flags, max 100 IDs/req, audit-logged as `_duplicated`) |
 | `GET` | `/changelog` | Implemented (filters, pagination) |
 | `POST` | `/products/bulk-operation` | Not implemented — bulk ops currently run client-side in `bulkOperations.ts`, commit via `PUT /products/batch`. A server-side endpoint is only needed for datasets too large for browser iteration |
@@ -382,6 +404,6 @@ Priority order:
 
 ## Known TODOs (from code)
 
-- **Issue #23** — Implement `BulkDelete` for `DELETE /products/batch`
 - **Issue #17** — PHP-side `SearchReplace` operation with regex support (current client-side text bulk op uses literal escaped strings, not regex)
 - **Issue #31** — Math operation parity on the backend; would enable a `POST /products/bulk-operation` endpoint for datasets too large for client-side iteration
+- **Issue #41 follow-up** — `copy_images=true` in `BulkDuplicate` currently reuses source attachment IDs (reference mode, no file clone); deep image copy is deferred
