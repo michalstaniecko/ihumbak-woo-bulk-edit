@@ -272,6 +272,50 @@ export interface ChangelogQueryParams {
 	date_to?: string;
 }
 
+// ── Saved Filters ────────────────────────────────────────────
+export const SavedFilterDefinitionSchema = z.object( {
+	filters: z.array( ProductFilterSchema ),
+	search: z.string().optional().default( '' ),
+	sort: SortSchema.optional(),
+} );
+export type SavedFilterDefinition = z.infer< typeof SavedFilterDefinitionSchema >;
+
+export const SavedFilterSchema = z.object( {
+	id: z.number(),
+	user_id: z.number(),
+	name: z.string(),
+	definition: SavedFilterDefinitionSchema,
+	is_shared: z.boolean(),
+	created_at: z.string(),
+	updated_at: z.string(),
+} );
+export type SavedFilter = z.infer< typeof SavedFilterSchema >;
+
+export const SavedFiltersListResponseSchema = z.object( {
+	items: z.array( SavedFilterSchema ),
+} );
+export type SavedFiltersListResponse = z.infer< typeof SavedFiltersListResponseSchema >;
+
+export const CreateSavedFilterPayloadSchema = z.object( {
+	name: z.string().min( 1 ).max( 191 ),
+	definition: SavedFilterDefinitionSchema,
+	is_shared: z.boolean().default( false ),
+} );
+export type CreateSavedFilterPayload = z.infer< typeof CreateSavedFilterPayloadSchema >;
+
+export const UpdateSavedFilterPayloadSchema = z.object( {
+	name: z.string().min( 1 ).max( 191 ).optional(),
+	definition: SavedFilterDefinitionSchema.optional(),
+	is_shared: z.boolean().optional(),
+} );
+export type UpdateSavedFilterPayload = z.infer< typeof UpdateSavedFilterPayloadSchema >;
+
+export const DeleteSavedFilterResponseSchema = z.object( {
+	deleted: z.boolean(),
+	id: z.number(),
+} );
+export type DeleteSavedFilterResponse = z.infer< typeof DeleteSavedFilterResponseSchema >;
+
 // ── API Error ────────────────────────────────────────────────
 export const ApiErrorDataSchema = z
 	.object( {

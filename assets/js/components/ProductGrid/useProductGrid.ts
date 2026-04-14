@@ -15,9 +15,9 @@ import { useFields } from '@/hooks/useFields';
 import { useVariations } from '@/hooks/useVariations';
 import { createColumns } from './columnFactory';
 import type { GridPaginationState } from '@/types/grid';
-import type { Field, Product, ProductFilter, Sort, VariationsResponse } from '@/types/api';
+import type { Field, Product, ProductFilter, Sort, VariationsResponse, SavedFilterDefinition } from '@/types/api';
 // VariationsResponse is used by the variationsMap type in the return shape.
-import { useExpansionStore } from '@/store';
+import { useExpansionStore, useFiltersStore } from '@/store';
 
 export interface UseProductGridReturn {
 	table: Table< Product >;
@@ -38,6 +38,7 @@ export interface UseProductGridReturn {
 	onAddFilter: ( filter: ProductFilter ) => void;
 	onRemoveFilter: ( index: number ) => void;
 	onClearAllFilters: () => void;
+	onApplyPreset: ( definition: SavedFilterDefinition ) => void;
 	expandedSet: Set< number >;
 	variationsMap: Map< number, VariationsResponse >;
 }
@@ -62,10 +63,17 @@ export function useProductGrid(): UseProductGridReturn {
 	const [ rowSelection, setRowSelection ] = useState< RowSelectionState >( {} );
 	const lastSelectedIndexRef = useRef< number | null >( null );
 
-	// Filter state
-	const [ filters, setFilters ] = useState< ProductFilter[] >( [] );
-	const [ searchQuery, setSearchQuery ] = useState( '' );
-	const [ debouncedSearch, setDebouncedSearch ] = useState( '' );
+	// Filter state — delegated to useFiltersStore so SavedFiltersMenu can call applyPreset
+	const filters = useFiltersStore( ( s ) => s.filters );
+	const searchQuery = useFiltersStore( ( s ) => s.searchQuery );
+	const setFilters = useFiltersStore( ( s ) => s.setFilters );
+	const storeAddFilter = useFiltersStore( ( s ) => s.addFilter );
+	const storeRemoveFilter = useFiltersStore( ( s ) => s.removeFilter );
+	const storeClearAll = useFiltersStore( ( s ) => s.clearAll );
+	const storeSetSearchQuery = useFiltersStore( ( s ) => s.setSearchQuery );
+	const storeApplyPreset = useFiltersStore( ( s ) => s.applyPreset );
+
+	const [ debouncedSearch, setDebouncedSearch ] = useState( searchQuery );
 
 	// Debounce search input (300ms)
 	useEffect( () => {
@@ -94,21 +102,24 @@ export function useProductGrid(): UseProductGridReturn {
 	}, [ filters, debouncedSearch ] );
 
 	const onSearchChange = useCallback( ( query: string ) => {
-		setSearchQuery( query );
-	}, [] );
+		storeSetSearchQuery( query );
+	}, [ storeSetSearchQuery ] );
 
 	const onAddFilter = useCallback( ( filter: ProductFilter ) => {
-		setFilters( ( prev ) => [ ...prev, filter ] );
-	}, [] );
+		storeAddFilter( filter );
+	}, [ storeAddFilter ] );
 
 	const onRemoveFilter = useCallback( ( index: number ) => {
-		setFilters( ( prev ) => prev.filter( ( _, i ) => i !== index ) );
-	}, [] );
+		storeRemoveFilter( index );
+	}, [ storeRemoveFilter ] );
 
 	const onClearAllFilters = useCallback( () => {
-		setFilters( [] );
-		setSearchQuery( '' );
-	}, [] );
+		storeClearAll();
+	}, [ storeClearAll ] );
+
+	const onApplyPreset = useCallback( ( definition: SavedFilterDefinition ) => {
+		storeApplyPreset( definition );
+	}, [ storeApplyPreset ] );
 
 	// Expansion state for variable products.
 	const expandedSet = useExpansionStore( ( s ) => s.expanded );
@@ -235,6 +246,7 @@ export function useProductGrid(): UseProductGridReturn {
 		onAddFilter,
 		onRemoveFilter,
 		onClearAllFilters,
+		onApplyPreset,
 		expandedSet,
 		variationsMap,
 	};

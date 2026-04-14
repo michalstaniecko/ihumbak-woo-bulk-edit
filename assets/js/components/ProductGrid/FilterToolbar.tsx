@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { __ } from '@wordpress/i18n';
-import type { Field, ProductFilter, FilterOperator } from '@/types/api';
+import type { Field, ProductFilter, FilterOperator, SavedFilterDefinition } from '@/types/api';
+import { SavedFiltersMenu } from './SavedFiltersMenu';
 
 interface FilterToolbarProps {
 	fields: Field[];
@@ -10,6 +11,7 @@ interface FilterToolbarProps {
 	onAddFilter: ( filter: ProductFilter ) => void;
 	onRemoveFilter: ( index: number ) => void;
 	onClearAll: () => void;
+	onApplyPreset: ( definition: SavedFilterDefinition ) => void;
 }
 
 const OPERATOR_LABELS: Record< FilterOperator, string > = {
@@ -42,6 +44,7 @@ export function FilterToolbar( {
 	onAddFilter,
 	onRemoveFilter,
 	onClearAll,
+	onApplyPreset,
 }: FilterToolbarProps ): JSX.Element {
 	const [ dropdownStep, setDropdownStep ] = useState< DropdownStep >( 'closed' );
 	const [ selectedField, setSelectedField ] = useState< Field | null >( null );
@@ -292,6 +295,12 @@ export function FilterToolbar( {
 						</div>
 					) }
 				</div>
+
+				<SavedFiltersMenu
+					currentFilters={ filters }
+					currentSearch={ searchQuery }
+					onApplyPreset={ onApplyPreset }
+				/>
 
 				{ filters.length > 0 && (
 					<button

@@ -9,3 +9,9 @@ export { useBulkDelete } from './useBulkDelete';
 export type { UseBulkDeleteReturn } from './useBulkDelete';
 export { useBulkDuplicate } from './useBulkDuplicate';
 export type { UseBulkDuplicateReturn } from './useBulkDuplicate';
+export {
+	useSavedFilters,
+	useCreateSavedFilter,
+	useUpdateSavedFilter,
+	useDeleteSavedFilter,
+} from './useSavedFilters';

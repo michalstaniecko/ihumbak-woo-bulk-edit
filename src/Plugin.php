@@ -8,6 +8,7 @@ use IhumbakWooBulkEdit\Admin\Menu;
 use IhumbakWooBulkEdit\Admin\AssetsLoader;
 use IhumbakWooBulkEdit\Api\ChangelogController;
 use IhumbakWooBulkEdit\Api\FieldsController;
+use IhumbakWooBulkEdit\Api\FiltersController;
 use IhumbakWooBulkEdit\Api\ProductsController;
 use IhumbakWooBulkEdit\Api\VariationsController;
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
@@ -17,6 +18,7 @@ use IhumbakWooBulkEdit\Persistence\BatchSaver;
 use IhumbakWooBulkEdit\Persistence\ChangeLogRepository;
 use IhumbakWooBulkEdit\Persistence\DatabaseMigrator;
 use IhumbakWooBulkEdit\Persistence\ProductSaver;
+use IhumbakWooBulkEdit\Persistence\SavedFiltersRepository;
 use IhumbakWooBulkEdit\Query\VariationsRepository;
 use IhumbakWooBulkEdit\Security\CapabilityChecker;
 use IhumbakWooBulkEdit\Security\RateLimiter;
@@ -219,6 +221,21 @@ final class Plugin
                 $c->get(CapabilityChecker::class),
             )
         );
+
+        $this->container->set(
+            SavedFiltersRepository::class,
+            static fn (Container $c): SavedFiltersRepository => new SavedFiltersRepository(
+                $c->get(DatabaseMigrator::class),
+            )
+        );
+
+        $this->container->set(
+            FiltersController::class,
+            static fn (Container $c): FiltersController => new FiltersController(
+                $c->get(SavedFiltersRepository::class),
+                $c->get(CapabilityChecker::class),
+            )
+        );
     }
 
     private function registerHooks(): void
@@ -247,6 +264,10 @@ final class Plugin
             /** @var VariationsController $variations */
             $variations = $this->container->get(VariationsController::class);
             $variations->register_routes();
+
+            /** @var FiltersController $filters */
+            $filters = $this->container->get(FiltersController::class);
+            $filters->register_routes();
         });
 
         // Ensure schema is up-to-date on upgrade (no-op if versions match).

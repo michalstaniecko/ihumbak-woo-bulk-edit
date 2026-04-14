@@ -36,6 +36,7 @@ describe( 'bulkDeleteProducts', () => {
 			total: 1,
 			success: 1,
 			errors: 0,
+			variation_errors: 0,
 			mode: 'trash',
 		} );
 
@@ -67,6 +68,7 @@ describe( 'bulkDeleteProducts', () => {
 			total: 2,
 			success: 2,
 			errors: 0,
+			variation_errors: 0,
 			mode: 'trash',
 		} );
 
@@ -84,6 +86,7 @@ describe( 'bulkDeleteProducts', () => {
 			total: 1,
 			success: 1,
 			errors: 0,
+			variation_errors: 0,
 			mode: 'permanent',
 		} );
 
@@ -109,6 +112,7 @@ describe( 'bulkDeleteProducts', () => {
 			total: 2,
 			success: 1,
 			errors: 1,
+			variation_errors: 0,
 			mode: 'trash',
 		} );
 

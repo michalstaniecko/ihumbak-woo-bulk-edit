@@ -36,6 +36,7 @@ export function ProductGrid(): JSX.Element {
 		onAddFilter,
 		onRemoveFilter,
 		onClearAllFilters,
+		onApplyPreset,
 		expandedSet,
 		variationsMap,
 	} = useProductGrid();
@@ -82,6 +83,7 @@ export function ProductGrid(): JSX.Element {
 				onAddFilter={ onAddFilter }
 				onRemoveFilter={ onRemoveFilter }
 				onClearAll={ onClearAllFilters }
+				onApplyPreset={ onApplyPreset }
 			/>
 
 			<div className="iwbe-grid-scroll-container">

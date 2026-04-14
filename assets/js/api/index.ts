@@ -8,3 +8,9 @@ export {
 } from './products';
 export type { BulkDeletePayload } from './products';
 export { fetchChangelog } from './changelog';
+export {
+	fetchSavedFilters,
+	createSavedFilter,
+	updateSavedFilter,
+	deleteSavedFilter,
+} from './savedFilters';

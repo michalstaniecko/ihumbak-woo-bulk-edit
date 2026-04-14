@@ -39,9 +39,10 @@ final class AssetsLoader
         );
 
         wp_localize_script('ihumbak-woo-bulk-edit-app', 'iwbeData', [
-            'restUrl'  => esc_url_raw(rest_url('ihumbak-woo-bulk-edit/v1/')),
-            'nonce'    => wp_create_nonce('wp_rest'),
-            'adminUrl' => esc_url_raw(admin_url()),
+            'restUrl'                  => esc_url_raw(rest_url('ihumbak-woo-bulk-edit/v1/')),
+            'nonce'                    => wp_create_nonce('wp_rest'),
+            'adminUrl'                 => esc_url_raw(admin_url()),
+            'canManageSharedFilters'   => current_user_can('manage_woocommerce'),
         ]);
     }
 

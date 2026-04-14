@@ -22,7 +22,7 @@ final class DatabaseMigrator
     /**
      * Current schema version. Bump whenever a table definition changes.
      */
-    public const SCHEMA_VERSION = '1.0.0';
+    public const SCHEMA_VERSION = '1.1.0';
 
     /**
      * Option key storing the installed schema version.
@@ -69,7 +69,8 @@ final class DatabaseMigrator
             updated_at DATETIME NOT NULL DEFAULT '0000-00-00 00:00:00',
             PRIMARY KEY  (id),
             KEY user_id (user_id),
-            KEY is_shared (is_shared)
+            KEY is_shared (is_shared),
+            UNIQUE KEY user_name (user_id, name)
         ) {$charsetCollate};";
 
         // Change log — audit trail of product field changes.
