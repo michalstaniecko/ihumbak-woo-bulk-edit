@@ -183,6 +183,42 @@ final class ProductsControllerTest extends WP_UnitTestCase
         self::assertSame('wbm_not_found', $data['results'][0]['code']);
     }
 
+    public function test_batch_save_with_stale_post_modified_returns_conflict_row(): void
+    {
+        $id = $this->createSimpleProduct('Original Name');
+
+        // Deliberately pass a post_modified that does not match the current value
+        // so the optimistic-lock check in ProductSaver::save() trips.
+        $stalePostModified = '2000-01-01 00:00:00';
+
+        $request = new WP_REST_Request('PUT', '/ihumbak-woo-bulk-edit/v1/products/batch');
+        $request->set_body_params([
+            'changes' => [
+                [
+                    'id'            => $id,
+                    'field'         => 'name',
+                    'value'         => 'New Name',
+                    'post_modified' => $stalePostModified,
+                ],
+            ],
+        ]);
+
+        $response = rest_get_server()->dispatch($request);
+        $data     = $response->get_data();
+
+        self::assertSame(200, $response->get_status());
+        self::assertSame(1, $data['total']);
+        self::assertSame(0, $data['success']);
+        self::assertSame(1, $data['errors']);
+        self::assertSame('error', $data['results'][0]['status']);
+        self::assertSame('wbm_conflict', $data['results'][0]['code']);
+        self::assertSame($id, $data['results'][0]['id']);
+
+        // Verify the stale write did not actually persist.
+        clean_post_cache($id);
+        self::assertSame('Original Name', wc_get_product($id)->get_name());
+    }
+
     // --- DELETE /products/batch ---
 
     public function test_batch_delete_without_ids_returns_400(): void

@@ -88,9 +88,9 @@ final class ProductSaver
         if ($currentModified !== $postModified) {
             return [
                 'status'  => 'error',
+                'code'    => 'wbm_conflict',
                 'id'      => $productId,
                 'message' => __('Product was modified by another user since you loaded it. Please reload and try again.', 'ihumbak-woo-bulk-edit'),
-                'code'    => 'wbm_conflict',
             ];
         }
 
@@ -103,6 +103,7 @@ final class ProductSaver
             if ($field === null) {
                 return [
                     'status'  => 'error',
+                    'code'    => 'wbm_unknown_field',
                     'id'      => $productId,
                     'message' => sprintf(
                         /* translators: %s: field key */
@@ -115,6 +116,7 @@ final class ProductSaver
             if (! $field->isEditable()) {
                 return [
                     'status'  => 'error',
+                    'code'    => 'wbm_not_editable',
                     'id'      => $productId,
                     'message' => sprintf(
                         /* translators: %s: field label */
@@ -127,6 +129,7 @@ final class ProductSaver
             if (! isset(self::FIELD_SETTERS[$fieldKey])) {
                 return [
                     'status'  => 'error',
+                    'code'    => 'wbm_no_setter',
                     'id'      => $productId,
                     'message' => sprintf(
                         /* translators: %s: field key */
@@ -142,6 +145,7 @@ final class ProductSaver
             if ($validation !== true) {
                 return [
                     'status'  => 'error',
+                    'code'    => 'wbm_validation_error',
                     'id'      => $productId,
                     'message' => $validation,
                 ];
@@ -176,6 +180,7 @@ final class ProductSaver
         if ($result === 0) {
             return [
                 'status'  => 'error',
+                'code'    => 'wbm_save_failed',
                 'id'      => $productId,
                 'message' => __('Failed to save product.', 'ihumbak-woo-bulk-edit'),
             ];
