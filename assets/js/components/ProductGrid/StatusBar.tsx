@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { __, sprintf } from '@wordpress/i18n';
+import { __, _n, sprintf } from '@wordpress/i18n';
 import { useChangesStore, useEditingStore } from '@/store';
 import type {
 	BulkDeleteResponse,
@@ -33,6 +33,8 @@ export function StatusBar( {
 }: StatusBarProps ): JSX.Element {
 	const [ showDeleteModal, setShowDeleteModal ] = useState( false );
 	const [ showDuplicateModal, setShowDuplicateModal ] = useState( false );
+	const [ duplicateSummary, setDuplicateSummary ] =
+		useState< BulkDuplicateResponse | null >( null );
 	const changes = useChangesStore( ( state ) => state.changes );
 	const discardAll = useChangesStore( ( state ) => state.discardAll );
 	const stopEditing = useEditingStore( ( state ) => state.stopEditing );
@@ -210,6 +212,35 @@ export function StatusBar( {
 				</span>
 			) }
 
+			{ duplicateSummary !== null && (
+				<span className="iwbe-summary-duplicated">
+					{ sprintf(
+						/* translators: %d: number of created duplicates */
+						_n(
+							'Created %d duplicate (draft).',
+							'Created %d duplicates (draft).',
+							duplicateSummary.success,
+							'ihumbak-woo-bulk-edit'
+						),
+						duplicateSummary.success
+					) }
+					{ duplicateSummary.errors > 0 &&
+						' ' +
+							sprintf(
+								/* translators: %d: number of errors */
+								__( '%d errors.', 'ihumbak-woo-bulk-edit' ),
+								duplicateSummary.errors
+							) }
+					<button
+						type="button"
+						className="iwbe-btn-dismiss"
+						onClick={ () => setDuplicateSummary( null ) }
+					>
+						{ __( 'OK', 'ihumbak-woo-bulk-edit' ) }
+					</button>
+				</span>
+			) }
+
 			{ showDeleteModal && (
 				<BulkDeleteConfirmModal
 					selectedIds={ selectedIds }
@@ -225,6 +256,7 @@ export function StatusBar( {
 					selectedCount={ selectedCount }
 					onClose={ () => setShowDuplicateModal( false ) }
 					onDuplicated={ ( result ) => {
+						setDuplicateSummary( result );
 						onDuplicated( result );
 						setShowDuplicateModal( false );
 					} }
