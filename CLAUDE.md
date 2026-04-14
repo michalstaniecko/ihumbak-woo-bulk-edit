@@ -11,120 +11,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 
 ## Implementation Status
 
-**Overall progress: ~90% — Backend MVP + persistence + audit log + bulk delete/duplicate + saved filter presets complete; frontend grid with inline editing (parent + variations), batch save, taxonomy filtering, change history drawer, client-side bulk operations modal per field type, destructive-action confirm modals, and filter save/load UI all working.**
-
-### Done (Backend MVP)
-- Plugin bootstrap with HPOS compatibility declaration
-- Custom DI Container (PSR-11 style, factory pattern)
-- Admin: Menu (WooCommerce submenu), AssetsLoader, ScreenController (React mount point)
-- REST API:
-  - `GET /fields` — fully working, returns all registered fields with metadata
-  - `POST /products/query` — fully working, filters/sorts/paginates via native SQL
-  - `GET /products/{id}/variations` — fully working (Issue #15 — `VariationsController` + `VariationsRepository`, returns flattened array of variations with parent metadata, used by frontend for lazy-loaded variation rows)
-  - `PUT /products/batch` — fully working (BatchSaver + ProductSaver, writes audit log)
-  - `DELETE /products/batch` — fully working (Issue #23 — `Operations\BulkDelete`; `trash` mode requires `edit_products`, `permanent` mode requires `delete_products` and cascades to variation children for variable products; route-level `permission_callback` enforces `delete_products` so there's a single authorization source of truth; every deletion writes a `_deleted` audit-log entry with a shallow pre-delete snapshot; response shape matches `BatchSaver::process()` with an extra `variation_errors` counter so `success + errors === total` holds at the parent level)
-  - `POST /products/duplicate` — fully working (Issue #41 — `Operations\BulkDuplicate` wraps `WC_Admin_Duplicate_Product::product_duplicate()`; `copy_meta`/`copy_images` toggles; max 100 IDs/req; one audit-log entry per parent as `_duplicated` with `source_id`/`source_name`/`variations` count)
-  - `GET /changelog` — fully working (filters: product_id, user_id, field, date_from, date_to; pagination)
-- Field system: FieldInterface, AbstractField, FieldType enum (11 types), FieldRegistry
-- **35 core fields** covering all WC product attributes (Issue #14): name, sku, slug, status, regular_price, sale_price, stock_quantity, manage_stock, backorders, sold_individually, weight, length, width, height, shipping_class, categories, tags, description, short_description, featured, catalog_visibility, reviews_allowed, menu_order, purchase_note, virtual, downloadable, download_limit, download_expiry, external_url, button_text, upsells, cross_sells, thumbnail, gallery, date_created
-- Query system: QueryBuilder (native SQL with dynamic LEFT JOINs + taxonomy subqueries), FilterParser, OperatorRegistry
-- 6 operators: `=`, `!=`, `LIKE`, `NOT LIKE`, `IS EMPTY`, `IS NOT EMPTY`
-- **Taxonomy filtering (Issue #35)**: `FilterParser::applyCondition` branches post columns / meta keys / taxonomies; `QueryBuilder::addTaxonomyCondition` emits `p.ID IN/NOT IN (subquery on term_relationships)` so products with many terms don't duplicate rows. Categories, tags, and shipping_class filterable with all 6 operators; negation (`!=`, `NOT LIKE`) also matches products with zero terms in the taxonomy
-- Security: CapabilityChecker (read/write/delete/manage), RateLimiter (transient-based, 10 req/60s/user)
-- Persistence: `ProductSaver` (per-product save via WC CRUD, captures pre-change values via `get_*` getters for diff; all error responses include a `code` key: `wbm_not_found`, `wbm_conflict`, `wbm_unknown_field`, `wbm_not_editable`, `wbm_no_setter`, `wbm_validation_error`, `wbm_save_failed`), `BatchSaver` (orchestrator with optimistic locking, `wp_defer_term_counting`, transient invalidation, forwards diff to audit log)
-- **Audit log (Issue #24)**: `DatabaseMigrator` (versioned `dbDelta`, `wbm_db_version` option), `ChangeLogRepository` (insert/logBatch/query/purgeOlderThan — JSON-encoded old/new values), `ChangelogController` (REST read endpoint), daily WP-Cron `wbm_changelog_rotation` purging entries older than `wbm_changelog_retention_days` (default 90). Tables `wbm_saved_filters` and `wbm_change_log` created on activation and via `maybeMigrate()` on every boot.
-- uninstall.php (drops tables, deletes options, clears rotation cron)
-
-### Done (Frontend Foundation)
-- Build pipeline: `@wordpress/scripts` v30 (webpack), TypeScript strict mode, `@/*` path aliases
-- React 18 app skeleton with `QueryClientProvider` (`assets/js/app.tsx`)
-- REST API client: typed `apiFetch` wrapper with `ApiError` class (`assets/js/api/client.ts`)
-- Endpoint functions: `fetchProducts`, `fetchFields`, `batchSaveProducts` (`assets/js/api/`)
-- React Query hooks: `useProducts` (with `keepPreviousData`), `useFields`, `useBatchSave`
-- Zod validation schemas for all API response types (`assets/js/types/api.ts`)
-- Global type declarations for `iwbeData` window object (`assets/js/types/global.d.ts`)
-- Build output: `assets/build/app.js`, `app.css`, `app.asset.php`
-
-### Done (Frontend Grid — Issue #9)
-- ProductGrid component with TanStack Table v8 + react-window v2 virtualization
-- Dynamic columns generated from `/fields` API (columnFactory.ts)
-- Server-side pagination: page controls (First/Prev/Next/Last), per-page select (25–500)
-- Column sorting: clickable headers, asc/desc toggle, sort resets page to 1
-- Checkbox row selection: single click + Shift+click range selection
-- StatusBar: total products count, selected count, background fetch indicator
-- LoadingSkeleton: animated placeholder during initial data fetch
-- CSS styling matching WooCommerce admin aesthetics (`assets/css/product-grid.css`)
-- **Horizontal scroll sync**: header and body wrapped in a single `.iwbe-grid-scroll-container` with an inner fixed-width div (sum of column widths) so header + rows scroll together
-
-### Done (Frontend Editing & Filtering — Issues #10, #11, #12, #13)
-- Zustand stores: `useChangesStore` (change tracking, undo/redo with 50-step history), `useEditingStore` (active cell, draft value, validation)
-- Inline cell editing with change highlighting, dedicated editors (`editors/TextEditor.tsx`, `NumberEditor.tsx`, `SelectEditor.tsx`) and shared `CellEditorProps`
-- Cell-level validation via `validation.ts` (per-field `validate()` + pending-changes context)
-- Batch save endpoint with progress bar, retry, and optimistic locking
-- Filter toolbar with quick search (name LIKE, debounced 300ms), multi-step "Add Filter" dropdown (field → operator → value)
-- Filter chips with remove buttons, "Clear all" to reset search + filters
-- All 6 operators in UI: equals, not equals, contains, not contains, is empty, is not empty
-- Filters combined by AND, auto-reload grid on change
-- Keyboard navigation (`useGridKeyboardNav`), undo/redo shortcuts (`useUndoRedoShortcuts`)
-
-### Done (Frontend Bulk Operations Modal — Issue #16, client-side)
-- `bulkOperations.ts` — pure operation engine with type-discriminated `NumericOperation` / `TextOperation` / `BooleanOperation` / `TaxonomyOperation` and applier functions; `applyNumericOperation` accepts an optional `baseValue` so relative ops can be computed from a different field than the one being written
-- `bulkEdit/BulkEditModal.tsx` — modal triggered from column header dropdown in `HeaderRow`, dispatches to per-field-type form via `inferBulkOperationKind`
-- Per-type forms: `NumericBulkForm` (set, increase/decrease absolute & pct, round, clear), `TextBulkForm` (set, search-replace with case sensitivity, append, prepend, upper/lower/title/sentence case, clear), `BooleanBulkForm` (set true/false, toggle), `TaxonomyBulkForm` (add, remove, replace terms)
-- **Sale price base selector (Issue #37)** — for `sale_price`, `NumericBulkForm` exposes a "Base" selector so relative numeric operations (increase/decrease absolute & pct, round) can be computed from the product's current `regular_price` instead of its current `sale_price`. Rows with missing / non-finite `regular_price` are silently skipped, and `BulkEditModal` surfaces the skipped count via an accessible notice
-- Scope selector: "Selected rows (N)" or "All filtered results (M)" — the latter paginates through `/products/query` via `fetchAllFilteredProducts.ts` with progress callback
-- Preview-and-commit: operations are applied optimistically to `useChangesStore` (no direct save), flowing through the existing `PUT /products/batch` pipeline — so no new REST endpoint was needed
-- Vitest coverage in `__tests__/bulkOperations.test.ts` for every operation mode (including the sale-price base-value path)
-
-### Done (Frontend Destructive Operations — Issues #23, #41)
-- `bulkDelete/BulkDeleteConfirmModal.tsx` — confirm modal for `DELETE /products/batch` with mode selector (trash / permanent), a type-`DELETE` safety gate for permanent mode, and a separate i18n'd message when `variation_errors > 0` so orphaned variations are surfaced to the operator
-- `bulkDuplicate/BulkDuplicateConfirmModal.tsx` — confirm modal for `POST /products/duplicate` with `copy_meta` / `copy_images` checkboxes; scope is **selected rows only** (no "all filtered" to avoid accidentally creating thousands of drafts); partial-failure banner
-- `useBulkDelete` / `useBulkDuplicate` React Query hooks; `api/products.ts` gains `bulkDeleteProducts` and `bulkDuplicateProducts`, each covered by Vitest in `api/__tests__/`
-- **Bulk duplicate success notice** — StatusBar displays a dismissible summary ("Created N duplicates (draft)" with error count if partial failure) after bulk duplicate completes (Issue #41)
-- `ChangeHistoryPanel` renders `_deleted` and `_duplicated` audit events (duplicated entries link to both source and new draft)
-
-### Done (Frontend Change History — Issue #24)
-- `api/changelog.ts` + `useChangelog` React Query hook, Zod-validated response
-- `ChangeHistoryPanel` drawer component (overlay + backdrop) triggered from toolbar button in `App.tsx`
-- Filter UI: product_id, user_id, field (select from registry), date_from, date_to, pagination
-- Old value in red, new value in green, clickable product links into wp-admin edit screen
-
-### Done (Frontend Inline Variation Editing — Issue #15)
-- New `GET /products/{id}/variations` endpoint returns flattened array with parent metadata
-- `QueryBuilder` now filters `post_type = 'product'` and hydrates `type` + `variations_count` per product
-- `useExpansionStore` (Zustand) manages expand/collapse state per parent ID
-- `useVariations` hook with `useQueries` for lazy parallel fetching of variations
-- `VirtualizedBody` dispatches `GridRow` vs `VariationRow` with dynamic `rowHeight` (40px parent, 38px variation)
-- `VariationRow` reuses same `useChangesStore`/`useEditingStore`/editor pipeline as parent rows
-- `ProductSaver` guards variation status to `publish`/`private` only (error code: `wbm_invalid_variation_status`)
-- `useBatchSave` merges variation `post_modified` from React Query cache for optimistic locking
-- `ExpansionToggle` component for parent-row expand/collapse UI
-
-### Done (Frontend Saved Filter Presets — Issue #18)
-- `FiltersController` REST endpoint: `GET /filters` (list), `POST /filters` (create), `PUT /filters/{id}` (update), `DELETE /filters/{id}` (delete)
-- `SavedFiltersRepository` CRUD layer (insert/update/delete/listForUser); max 100 filters per user; supports shared filters (user_id=0, is_shared=1)
-- Database table `wbm_saved_filters` created via `DatabaseMigrator` schema v1.1.0 (id, user_id, name, definition JSON, is_shared, created_at, updated_at timestamps)
-- Frontend: `SavedFiltersMenu` component (dropdown with load/save/edit/delete UI) + `SaveFilterDialog` modal for naming/sharing
-- Zustand stores: `useFiltersStore` (active filters state with applyPreset method), `useRecentFiltersStore` (tracks recent user selections)
-- React Query hooks: `useSavedFilters`, `useCreateSavedFilter`, `useUpdateSavedFilter`, `useDeleteSavedFilter`
-- API client: `api/savedFilters.ts` with fully typed Zod schemas (`SavedFilter`, `SavedFilterDefinition`, create/update/delete payloads)
-- Tests: `SavedFiltersRepositoryTest` (CRUD operations, user isolation, shared filter handling), `FiltersControllerTest` (all 4 HTTP routes with permission checks), `api/__tests__/savedFilters.test.ts` (client payload shapes)
-
-### Done (Tests — partial)
-- PHPUnit scaffolding with Unit + Integration suites
-- Unit tests: `ContainerTest`, `FieldRegistryTest`, `FieldTypeTest`, all 6 core field tests (Name/Sku/RegularPrice/SalePrice/StockQuantity/Status), `QueryBuilderTest`, all 6 operator tests
-- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest` (includes batch save tests with real products, nonexistent-ID error handling, and optimistic-lock conflict detection via stale `post_modified`), `ProductsControllerDeleteTest`, `ProductsControllerDuplicateTest`, `ProductsControllerVariationsTest` (Issue #15 — variation endpoint CRUD), `VariationsControllerTest`, `VariationsRepositoryTest`, `ProductSaverVariationTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`, `DatabaseMigratorTest`, `ChangeLogRepositoryTest`, `ChangelogControllerTest`, `FiltersControllerTest`, `SavedFiltersRepositoryTest`
-- Integration test bootstrap (`tests/Integration/bootstrap.php`) loads WooCommerce **before** the plugin under test so tests that instantiate `WC_Product` no longer error with "Class not found"
-- Frontend: Vitest configured; `useChangesStore.test.ts` (store coverage), `ProductGrid/__tests__/bulkOperations.test.ts` (all bulk operation appliers including sale-price base-value path), `bulkDuplicate/__tests__/BulkDuplicateConfirmModal.test.tsx` (modal interaction), `store/__tests__/useExpansionStore.test.ts` (expand/collapse state), `store/__tests__/useFiltersStore.test.ts` (filters state), `store/__tests__/useRecentFiltersStore.test.ts` (recent filters tracking), `ProductGrid/__tests__/expansion.test.ts` (variation row display and editing), and `api/__tests__/bulkDeleteProducts.test.ts` / `bulkDuplicateProducts.test.ts` / `savedFilters.test.ts` (API client payloads)
-- E2E: directory exists, no Playwright tests yet
-
-### Not Yet Implemented
-- PHP operation classes for **edit** — Issues #17, #31. `src/Operations/` currently holds `BulkDelete` and `BulkDuplicate`; a server-side math/text engine would be needed for a dedicated `POST /products/bulk-operation` endpoint (current bulk *edit* ops are still computed in the browser and committed via `PUT /products/batch`)
-- Export/Import endpoints — Issue #22
-- Extended operators + AND/OR logic — Issue #19
-- Integration modules (WPML, Yoast, ACF, etc.) — Issues #21, #26, #27
-- E2E / Playwright tests — Issue #29
-- GPL v2+ license headers in source files
+Track progress in GitHub Issues: https://github.com/michalstaniecko/ihumbak-woo-bulk-edit/issues
 
 ## Target Environment
 
@@ -240,94 +127,13 @@ ihumbak-woo-bulk-edit/
 │   ├── js/
 │   │   ├── app.tsx               # React root, QueryClientProvider
 │   │   ├── components/
-│   │   │   ├── App.tsx           # Main app component, mounts ProductGrid + ChangeHistoryPanel
-│   │   │   ├── ChangeHistoryPanel/
-│   │   │   │   ├── ChangeHistoryPanel.tsx  # Drawer for audit log viewer (filters, pagination); renders _deleted / _duplicated events
-│   │   │   │   └── index.ts
-│   │   │   └── ProductGrid/
-│   │   │       ├── ProductGrid.tsx       # Main grid container, scroll-container wrapper
-│   │   │       ├── useProductGrid.ts     # Central hook (table, sort, pagination, selection, filters, bulk modal trigger)
-│   │   │       ├── columnFactory.ts      # Field[] → ColumnDef[] mapping
-│   │   │       ├── VirtualizedBody.tsx   # react-window List integration; dispatches GridRow vs VariationRow
-│   │   │       ├── displayRows.ts        # Flattens parent products + variations for virtualized display
-│   │   │       ├── HeaderRow.tsx         # Header with sort indicators + column dropdown (triggers BulkEditModal)
-│   │   │       ├── GridRow.tsx           # Single parent-product row with cells + editor mounting
-│   │   │       ├── VariationRow.tsx      # Single variation row (indented child); reuses edit/change pipeline
-│   │   │       ├── ExpansionToggle.tsx   # Expand/collapse button for parent rows
-│   │   │       ├── Pagination.tsx        # Page controls + per-page select
-│   │   │       ├── StatusBar.tsx         # Total/selected count, save progress
-│   │   │       ├── FilterToolbar.tsx     # Search, add-filter dropdown, chips
-│   │   │       ├── SavedFiltersMenu/
-│   │   │       │   ├── SavedFiltersMenu.tsx   # Dropdown menu for loading saved filter presets (Issue #18)
-│   │   │       │   ├── SaveFilterDialog.tsx   # Modal for saving current filters with name & share option
-│   │   │       │   └── index.ts
-│   │   │       ├── LoadingSkeleton.tsx   # Animated skeleton loader
-│   │   │       ├── validation.ts         # Cell-level validation with pending changes
-│   │   │       ├── bulkOperations.ts     # Pure operation engine (numeric/text/boolean/taxonomy appliers)
-│   │   │       ├── bulkEdit/
-│   │   │       │   ├── BulkEditModal.tsx           # Modal shell, scope selector, form dispatch, skipped-rows notice
-│   │   │       │   ├── NumericBulkForm.tsx         # Set/increase/decrease/pct/round/clear + base selector for sale_price
-│   │   │       │   ├── TextBulkForm.tsx            # Set/search-replace/append/prepend/case/clear
-│   │   │       │   ├── BooleanBulkForm.tsx         # Set true/false/toggle
-│   │   │       │   ├── TaxonomyBulkForm.tsx        # Add/remove/replace terms
-│   │   │       │   ├── fetchAllFilteredProducts.ts # Paginate /products/query for "all filtered" scope
-│   │   │       │   └── index.ts
-│   │   │       ├── bulkDelete/
-│   │   │       │   ├── BulkDeleteConfirmModal.tsx  # Trash / permanent + type-DELETE safety gate + variation_errors notice
-│   │   │       │   └── index.ts
-│   │   │       ├── bulkDuplicate/
-│   │   │       │   ├── BulkDuplicateConfirmModal.tsx  # copy_meta / copy_images toggles, selected-rows-only scope
-│   │   │       │   ├── __tests__/
-│   │   │       │   │   └── BulkDuplicateConfirmModal.test.tsx
-│   │   │       │   └── index.ts
-│   │   │       ├── editors/
-│   │   │       │   ├── CellEditorProps.ts  # Shared editor prop contract
-│   │   │       │   ├── TextEditor.tsx      # Text/textarea editor
-│   │   │       │   ├── NumberEditor.tsx    # Number/price editor
-│   │   │       │   ├── SelectEditor.tsx    # Select/boolean editor
-│   │   │       │   └── index.ts            # getEditorForField factory
-│   │   │       ├── __tests__/
-│   │   │       │   └── bulkOperations.test.ts  # Vitest coverage for all operation modes (incl. sale-price base)
-│   │   │       └── index.ts              # Barrel export
-│   │   ├── api/
-│   │   │   ├── client.ts         # apiFetch wrapper, ApiError class
-│   │   │   ├── products.ts       # fetchProducts, batchSaveProducts, bulkDeleteProducts, bulkDuplicateProducts
-│   │   │   ├── fields.ts         # fetchFields function
-│   │   │   ├── changelog.ts      # fetchChangelog function
-│   │   │   ├── savedFilters.ts   # getSavedFilters, createSavedFilter, updateSavedFilter, deleteSavedFilter (Issue #18)
-│   │   │   ├── __tests__/
-│   │   │   │   ├── bulkDeleteProducts.test.ts
-│   │   │   │   ├── bulkDuplicateProducts.test.ts
-│   │   │   │   └── savedFilters.test.ts
-│   │   │   └── index.ts          # Barrel export
-│   │   ├── hooks/
-│   │   │   ├── useProducts.ts           # React Query hook (keepPreviousData)
-│   │   │   ├── useFields.ts             # React Query hook
-│   │   │   ├── useVariations.ts         # useQueries hook for lazy parallel variation fetching
-│   │   │   ├── useBatchSave.ts          # Batch save orchestration with progress; merges variation post_modified
-│   │   │   ├── useBulkDelete.ts         # DELETE /products/batch mutation
-│   │   │   ├── useBulkDuplicate.ts      # POST /products/duplicate mutation
-│   │   │   ├── useChangelog.ts          # React Query hook for audit log
-│   │   │   ├── useSavedFilters.ts       # useQuery + useMutation hooks for GET|POST|PUT|DELETE /filters (Issue #18)
-│   │   │   ├── useGridKeyboardNav.ts    # Arrow keys + Enter navigation
-│   │   │   ├── useUndoRedoShortcuts.ts  # Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z
-│   │   │   └── index.ts          # Barrel export
-│   │   ├── types/
-│   │   │   ├── api.ts            # Zod schemas for Field, Product, Filter, etc.
-│   │   │   ├── grid.ts           # Grid-specific types (GridPaginationState)
-│   │   │   └── global.d.ts       # iwbeData interface (restUrl, nonce, adminUrl)
-│   │   └── store/
-│   │       ├── useChangesStore.ts  # Change tracking with undo/redo
-│   │       ├── useEditingStore.ts  # Cell editing UI state
-│   │       ├── useExpansionStore.ts # Parent product expand/collapse state
-│   │       ├── useFiltersStore.ts  # Filter list + search state with preset loading (Issue #18)
-│   │       ├── useRecentFiltersStore.ts # Recent filter selections for quick recall (Issue #18)
-│   │       ├── __tests__/
-│   │       │   ├── useChangesStore.test.ts  # Vitest store coverage
-│   │       │   ├── useExpansionStore.test.ts # Expansion store coverage
-│   │       │   ├── useFiltersStore.test.ts  # Filters state with applyPreset
-│   │       │   └── useRecentFiltersStore.test.ts # Recent filters tracking
-│   │       └── index.ts           # Barrel export
+│   │   │   ├── App.tsx           # Main app component
+│   │   │   ├── ChangeHistoryPanel/  # Audit log drawer (filters, pagination)
+│   │   │   └── ProductGrid/      # Grid, toolbar, bulk-edit/delete/duplicate modals, inline editors, variation rows
+│   │   ├── api/                  # apiFetch wrapper + per-endpoint functions
+│   │   ├── hooks/                # React Query + custom hooks (save, delete, duplicate, variations, filters)
+│   │   ├── store/                # Zustand stores (changes, editing, expansion, filters, recent-filters)
+│   │   └── types/                # Zod schemas (api.ts), grid types, global.d.ts (iwbeData)
 │   ├── css/
 │   │   └── product-grid.css      # Grid styles (WC admin aesthetic)
 │   └── build/                    # Compiled output (app.js, app.asset.php)
@@ -377,19 +183,19 @@ Endpoints and status:
 |--------|----------|--------|
 | `GET` | `/fields` | Implemented |
 | `POST` | `/products/query` | Implemented |
-| `GET` | `/products/{id}/variations` | Implemented (Issue #15 — `VariationsController` + `VariationsRepository`, returns flattened array of variations) |
-| `PUT` | `/products/batch` | Implemented (BatchSaver + ProductSaver, optimistic locking with `post_modified` conflict detection, writes audit log; error responses include typed `code` keys: `wbm_not_found`, `wbm_conflict`, `wbm_unknown_field`, `wbm_not_editable`, `wbm_no_setter`, `wbm_validation_error`, `wbm_save_failed`, `wbm_invalid_variation_status`) |
-| `DELETE` | `/products/batch` | Implemented (Issue #23 — `Operations\BulkDelete`, `mode=trash\|permanent`, route enforces `delete_products`, variation cascade for variable products, audit-logged as `_deleted`, `variation_errors` separate counter) |
-| `POST` | `/products/duplicate` | Implemented (Issue #41 — wraps WC core duplicator, `copy_meta`/`copy_images` flags, max 100 IDs/req, audit-logged as `_duplicated`) |
-| `GET` | `/changelog` | Implemented (filters, pagination) |
-| `POST` | `/products/bulk-operation` | Not implemented — bulk ops currently run client-side in `bulkOperations.ts`, commit via `PUT /products/batch`. A server-side endpoint is only needed for datasets too large for browser iteration |
-| `GET` | `/filters` | Implemented (Issue #18 — `FiltersController`, list filters visible to current user) |
-| `POST` | `/filters` | Implemented (Issue #18 — create new filter preset) |
-| `PUT` | `/filters/{id}` | Implemented (Issue #18 — update existing filter) |
-| `DELETE` | `/filters/{id}` | Implemented (Issue #18 — delete a filter) |
-| `POST` | `/export` | Planned (Issue #22) |
-| `POST` | `/import` | Planned (Issue #22) |
-| `GET` | `/import/status/{id}` | Planned (Issue #22) |
+| `GET` | `/products/{id}/variations` | Implemented |
+| `PUT` | `/products/batch` | Implemented |
+| `DELETE` | `/products/batch` | Implemented |
+| `POST` | `/products/duplicate` | Implemented |
+| `GET` | `/changelog` | Implemented |
+| `POST` | `/products/bulk-operation` | Not implemented (bulk ops run client-side, commit via `PUT /products/batch`) |
+| `GET` | `/filters` | Implemented |
+| `POST` | `/filters` | Implemented |
+| `PUT` | `/filters/{id}` | Implemented |
+| `DELETE` | `/filters/{id}` | Implemented |
+| `POST` | `/export` | Planned |
+| `POST` | `/import` | Planned |
+| `GET` | `/import/status/{id}` | Planned |
 
 Query endpoint accepts: `filters` (array of `{field, operator, value}`), `sort` (`{field, order}`), `page` (min 1), `per_page` (10-500).
 
@@ -414,12 +220,11 @@ Error format: `{ "code": "wbm_*", "message": "...", "data": { "status": 4xx, ...
 
 ## Testing
 
-- PHPUnit Unit suite — Container, FieldRegistry, FieldType, core fields, QueryBuilder, operators (in place)
-- PHPUnit Integration suite (wp-phpunit) — Plugin bootstrap, FieldsController, ProductsController, FilterParser, QueryBuilder, Like/NotLike operators, CapabilityChecker, RateLimiter (in place)
-- Vitest for frontend unit tests — currently `useChangesStore.test.ts`; expand to editors, validation, columnFactory
-- Playwright for e2e tests — planned (Issue #29)
-- Performance benchmarks with 100k product seed — planned
-- Target 80%+ coverage for Operations, FieldRegistry, QueryBuilder
+- `tests/Unit/` — PHPUnit unit tests (Container, Fields, Query, Operators)
+- `tests/Integration/` — PHPUnit integration tests via wp-phpunit (controllers, repositories, security)
+- `assets/js/**/__tests__/` — Vitest frontend unit tests (stores, API client, bulk operations, modals)
+- `tests/e2e/` — Playwright e2e tests (planned, Issue #29)
+- Target: 80%+ coverage for Operations, FieldRegistry, QueryBuilder
 
 ## Build & Dev Commands
 
@@ -450,8 +255,3 @@ Priority order:
 5. WooCommerce Subscriptions
 6. Wholesale plugins
 
-## Known TODOs (from code)
-
-- **Issue #17** — PHP-side `SearchReplace` operation with regex support (current client-side text bulk op uses literal escaped strings, not regex)
-- **Issue #31** — Math operation parity on the backend; would enable a `POST /products/bulk-operation` endpoint for datasets too large for client-side iteration
-- **Issue #41 follow-up** — `copy_images=true` in `BulkDuplicate` currently reuses source attachment IDs (reference mode, no file clone); deep image copy is deferred
