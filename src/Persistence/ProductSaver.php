@@ -76,6 +76,7 @@ final class ProductSaver
         if (! $product instanceof WC_Product) {
             return [
                 'status'  => 'error',
+                'code'    => 'wbm_not_found',
                 'id'      => $productId,
                 'message' => __('Product not found.', 'ihumbak-woo-bulk-edit'),
             ];
