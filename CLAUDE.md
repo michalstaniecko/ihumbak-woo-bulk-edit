@@ -11,7 +11,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 
 ## Implementation Status
 
-**Overall progress: ~80% — Backend MVP + persistence + audit log + bulk delete/duplicate complete; frontend grid with inline editing, batch save, taxonomy filtering, change history drawer, client-side bulk operations modal per field type, and destructive-action confirm modals all working.**
+**Overall progress: ~85% — Backend MVP + persistence + audit log + bulk delete/duplicate complete; frontend grid with inline editing (parent + variations), batch save, taxonomy filtering, change history drawer, client-side bulk operations modal per field type, and destructive-action confirm modals all working.**
 
 ### Done (Backend MVP)
 - Plugin bootstrap with HPOS compatibility declaration
@@ -20,6 +20,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - REST API:
   - `GET /fields` — fully working, returns all registered fields with metadata
   - `POST /products/query` — fully working, filters/sorts/paginates via native SQL
+  - `GET /products/{id}/variations` — fully working (Issue #15 — `VariationsController` + `VariationsRepository`, returns flattened array of variations with parent metadata, used by frontend for lazy-loaded variation rows)
   - `PUT /products/batch` — fully working (BatchSaver + ProductSaver, writes audit log)
   - `DELETE /products/batch` — fully working (Issue #23 — `Operations\BulkDelete`; `trash` mode requires `edit_products`, `permanent` mode requires `delete_products` and cascades to variation children for variable products; route-level `permission_callback` enforces `delete_products` so there's a single authorization source of truth; every deletion writes a `_deleted` audit-log entry with a shallow pre-delete snapshot; response shape matches `BatchSaver::process()` with an extra `variation_errors` counter so `success + errors === total` holds at the parent level)
   - `POST /products/duplicate` — fully working (Issue #41 — `Operations\BulkDuplicate` wraps `WC_Admin_Duplicate_Product::product_duplicate()`; `copy_meta`/`copy_images` toggles; max 100 IDs/req; one audit-log entry per parent as `_duplicated` with `source_id`/`source_name`/`variations` count)
@@ -88,12 +89,23 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - Filter UI: product_id, user_id, field (select from registry), date_from, date_to, pagination
 - Old value in red, new value in green, clickable product links into wp-admin edit screen
 
+### Done (Frontend Inline Variation Editing — Issue #15)
+- New `GET /products/{id}/variations` endpoint returns flattened array with parent metadata
+- `QueryBuilder` now filters `post_type = 'product'` and hydrates `type` + `variations_count` per product
+- `useExpansionStore` (Zustand) manages expand/collapse state per parent ID
+- `useVariations` hook with `useQueries` for lazy parallel fetching of variations
+- `VirtualizedBody` dispatches `GridRow` vs `VariationRow` with dynamic `rowHeight` (40px parent, 38px variation)
+- `VariationRow` reuses same `useChangesStore`/`useEditingStore`/editor pipeline as parent rows
+- `ProductSaver` guards variation status to `publish`/`private` only (error code: `wbm_invalid_variation_status`)
+- `useBatchSave` merges variation `post_modified` from React Query cache for optimistic locking
+- `ExpansionToggle` component for parent-row expand/collapse UI
+
 ### Done (Tests — partial)
 - PHPUnit scaffolding with Unit + Integration suites
 - Unit tests: `ContainerTest`, `FieldRegistryTest`, `FieldTypeTest`, all 6 core field tests (Name/Sku/RegularPrice/SalePrice/StockQuantity/Status), `QueryBuilderTest`, all 6 operator tests
-- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest` (includes batch save tests with real products, nonexistent-ID error handling, and optimistic-lock conflict detection via stale `post_modified`), `ProductsControllerDeleteTest`, `ProductsControllerDuplicateTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`, `DatabaseMigratorTest`, `ChangeLogRepositoryTest`, `ChangelogControllerTest`
+- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest` (includes batch save tests with real products, nonexistent-ID error handling, and optimistic-lock conflict detection via stale `post_modified`), `ProductsControllerDeleteTest`, `ProductsControllerDuplicateTest`, `ProductsControllerVariationsTest` (Issue #15 — variation endpoint CRUD), `VariationsControllerTest`, `VariationsRepositoryTest`, `ProductSaverVariationTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`, `DatabaseMigratorTest`, `ChangeLogRepositoryTest`, `ChangelogControllerTest`
 - Integration test bootstrap (`tests/Integration/bootstrap.php`) loads WooCommerce **before** the plugin under test so tests that instantiate `WC_Product` no longer error with "Class not found"
-- Frontend: Vitest configured; `useChangesStore.test.ts` (store coverage), `ProductGrid/__tests__/bulkOperations.test.ts` (all bulk operation appliers including sale-price base-value path), `bulkDuplicate/__tests__/BulkDuplicateConfirmModal.test.tsx` (modal interaction), and `api/__tests__/bulkDeleteProducts.test.ts` / `bulkDuplicateProducts.test.ts` (API client payloads)
+- Frontend: Vitest configured; `useChangesStore.test.ts` (store coverage), `ProductGrid/__tests__/bulkOperations.test.ts` (all bulk operation appliers including sale-price base-value path), `bulkDuplicate/__tests__/BulkDuplicateConfirmModal.test.tsx` (modal interaction), `store/__tests__/useExpansionStore.test.ts` (expand/collapse state), `ProductGrid/__tests__/expansion.test.ts` (variation row display and editing), and `api/__tests__/bulkDeleteProducts.test.ts` / `bulkDuplicateProducts.test.ts` (API client payloads)
 - E2E: directory exists, no Playwright tests yet
 
 ### Not Yet Implemented
@@ -101,7 +113,6 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - Filters CRUD endpoints (`GET|POST|PUT|DELETE /filters`) — Issue #18
 - Export/Import endpoints — Issue #22
 - Extended operators + AND/OR logic — Issue #19
-- Variants inline editing — Issue #15
 - Integration modules (WPML, Yoast, ACF, etc.) — Issues #21, #26, #27
 - E2E / Playwright tests — Issue #29
 - GPL v2+ license headers in source files
@@ -167,10 +178,12 @@ ihumbak-woo-bulk-edit/
 │   │   ├── RestController.php    # Abstract base (namespace, helpers)
 │   │   ├── FieldsController.php  # GET /fields endpoint
 │   │   ├── ProductsController.php # query / batch / delete / duplicate endpoints
+│   │   ├── VariationsController.php # GET /products/{id}/variations endpoint
 │   │   └── ChangelogController.php # GET /changelog endpoint
 │   ├── Query/
-│   │   ├── QueryBuilder.php      # Native SQL builder with dynamic JOINs + taxonomy subqueries
+│   │   ├── QueryBuilder.php      # Native SQL builder with dynamic JOINs + taxonomy subqueries; filters post_type='product', hydrates type + variations_count
 │   │   ├── FilterParser.php      # Parses filter JSON, branches post-col / meta / taxonomy
+│   │   ├── VariationsRepository.php # Fetches variations for a parent product via WP REST API
 │   │   └── Operators/
 │   │       ├── OperatorInterface.php
 │   │       ├── OperatorRegistry.php
@@ -203,7 +216,7 @@ ihumbak-woo-bulk-edit/
 │   │   ├── BulkDelete.php        # Trash / permanent delete with variation cascade, audit logging
 │   │   └── BulkDuplicate.php     # Wraps WC_Admin_Duplicate_Product, copy_meta/copy_images toggles, audit logging
 │   ├── Persistence/
-│   │   ├── ProductSaver.php      # Per-product save via WC CRUD with validation
+│   │   ├── ProductSaver.php      # Per-product save via WC CRUD with validation; guards variation status to publish/private only
 │   │   ├── BatchSaver.php        # Batch orchestrator, optimistic locking, transient cleanup
 │   │   ├── DatabaseMigrator.php  # Versioned dbDelta, wbm_db_version option
 │   │   └── ChangeLogRepository.php # Audit log insert/logBatch/query/purgeOlderThan
@@ -224,9 +237,12 @@ ihumbak-woo-bulk-edit/
 │   │   │       ├── ProductGrid.tsx       # Main grid container, scroll-container wrapper
 │   │   │       ├── useProductGrid.ts     # Central hook (table, sort, pagination, selection, filters, bulk modal trigger)
 │   │   │       ├── columnFactory.ts      # Field[] → ColumnDef[] mapping
-│   │   │       ├── VirtualizedBody.tsx   # react-window List integration
+│   │   │       ├── VirtualizedBody.tsx   # react-window List integration; dispatches GridRow vs VariationRow
+│   │   │       ├── displayRows.ts        # Flattens parent products + variations for virtualized display
 │   │   │       ├── HeaderRow.tsx         # Header with sort indicators + column dropdown (triggers BulkEditModal)
-│   │   │       ├── GridRow.tsx           # Single row with cells + editor mounting
+│   │   │       ├── GridRow.tsx           # Single parent-product row with cells + editor mounting
+│   │   │       ├── VariationRow.tsx      # Single variation row (indented child); reuses edit/change pipeline
+│   │   │       ├── ExpansionToggle.tsx   # Expand/collapse button for parent rows
 │   │   │       ├── Pagination.tsx        # Page controls + per-page select
 │   │   │       ├── StatusBar.tsx         # Total/selected count, save progress
 │   │   │       ├── FilterToolbar.tsx     # Search, add-filter dropdown, chips
@@ -270,7 +286,8 @@ ihumbak-woo-bulk-edit/
 │   │   ├── hooks/
 │   │   │   ├── useProducts.ts           # React Query hook (keepPreviousData)
 │   │   │   ├── useFields.ts             # React Query hook
-│   │   │   ├── useBatchSave.ts          # Batch save orchestration with progress
+│   │   │   ├── useVariations.ts         # useQueries hook for lazy parallel variation fetching
+│   │   │   ├── useBatchSave.ts          # Batch save orchestration with progress; merges variation post_modified
 │   │   │   ├── useBulkDelete.ts         # DELETE /products/batch mutation
 │   │   │   ├── useBulkDuplicate.ts      # POST /products/duplicate mutation
 │   │   │   ├── useChangelog.ts          # React Query hook for audit log
@@ -284,8 +301,10 @@ ihumbak-woo-bulk-edit/
 │   │   └── store/
 │   │       ├── useChangesStore.ts  # Change tracking with undo/redo
 │   │       ├── useEditingStore.ts  # Cell editing UI state
+│   │       ├── useExpansionStore.ts # Parent product expand/collapse state
 │   │       ├── __tests__/
-│   │       │   └── useChangesStore.test.ts  # Vitest store coverage
+│   │       │   ├── useChangesStore.test.ts  # Vitest store coverage
+│   │       │   └── useExpansionStore.test.ts # Expansion store coverage
 │   │       └── index.ts           # Barrel export
 │   ├── css/
 │   │   └── product-grid.css      # Grid styles (WC admin aesthetic)
@@ -334,7 +353,8 @@ Endpoints and status:
 |--------|----------|--------|
 | `GET` | `/fields` | Implemented |
 | `POST` | `/products/query` | Implemented |
-| `PUT` | `/products/batch` | Implemented (BatchSaver + ProductSaver, optimistic locking with `post_modified` conflict detection, writes audit log; error responses include typed `code` keys: `wbm_not_found`, `wbm_conflict`, `wbm_unknown_field`, `wbm_not_editable`, `wbm_no_setter`, `wbm_validation_error`, `wbm_save_failed`) |
+| `GET` | `/products/{id}/variations` | Implemented (Issue #15 — `VariationsController` + `VariationsRepository`, returns flattened array of variations) |
+| `PUT` | `/products/batch` | Implemented (BatchSaver + ProductSaver, optimistic locking with `post_modified` conflict detection, writes audit log; error responses include typed `code` keys: `wbm_not_found`, `wbm_conflict`, `wbm_unknown_field`, `wbm_not_editable`, `wbm_no_setter`, `wbm_validation_error`, `wbm_save_failed`, `wbm_invalid_variation_status`) |
 | `DELETE` | `/products/batch` | Implemented (Issue #23 — `Operations\BulkDelete`, `mode=trash\|permanent`, route enforces `delete_products`, variation cascade for variable products, audit-logged as `_deleted`, `variation_errors` separate counter) |
 | `POST` | `/products/duplicate` | Implemented (Issue #41 — wraps WC core duplicator, `copy_meta`/`copy_images` flags, max 100 IDs/req, audit-logged as `_duplicated`) |
 | `GET` | `/changelog` | Implemented (filters, pagination) |
