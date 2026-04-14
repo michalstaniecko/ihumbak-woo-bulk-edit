@@ -30,7 +30,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - 6 operators: `=`, `!=`, `LIKE`, `NOT LIKE`, `IS EMPTY`, `IS NOT EMPTY`
 - **Taxonomy filtering (Issue #35)**: `FilterParser::applyCondition` branches post columns / meta keys / taxonomies; `QueryBuilder::addTaxonomyCondition` emits `p.ID IN/NOT IN (subquery on term_relationships)` so products with many terms don't duplicate rows. Categories, tags, and shipping_class filterable with all 6 operators; negation (`!=`, `NOT LIKE`) also matches products with zero terms in the taxonomy
 - Security: CapabilityChecker (read/write/delete/manage), RateLimiter (transient-based, 10 req/60s/user)
-- Persistence: `ProductSaver` (per-product save via WC CRUD, captures pre-change values via `get_*` getters for diff), `BatchSaver` (orchestrator with optimistic locking, `wp_defer_term_counting`, transient invalidation, forwards diff to audit log)
+- Persistence: `ProductSaver` (per-product save via WC CRUD, captures pre-change values via `get_*` getters for diff; all error responses include a `code` key: `wbm_not_found`, `wbm_conflict`, `wbm_unknown_field`, `wbm_not_editable`, `wbm_no_setter`, `wbm_validation_error`, `wbm_save_failed`), `BatchSaver` (orchestrator with optimistic locking, `wp_defer_term_counting`, transient invalidation, forwards diff to audit log)
 - **Audit log (Issue #24)**: `DatabaseMigrator` (versioned `dbDelta`, `wbm_db_version` option), `ChangeLogRepository` (insert/logBatch/query/purgeOlderThan — JSON-encoded old/new values), `ChangelogController` (REST read endpoint), daily WP-Cron `wbm_changelog_rotation` purging entries older than `wbm_changelog_retention_days` (default 90). Tables `wbm_saved_filters` and `wbm_change_log` created on activation and via `maybeMigrate()` on every boot.
 - uninstall.php (drops tables, deletes options, clears rotation cron)
 
@@ -79,6 +79,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 - `bulkDelete/BulkDeleteConfirmModal.tsx` — confirm modal for `DELETE /products/batch` with mode selector (trash / permanent), a type-`DELETE` safety gate for permanent mode, and a separate i18n'd message when `variation_errors > 0` so orphaned variations are surfaced to the operator
 - `bulkDuplicate/BulkDuplicateConfirmModal.tsx` — confirm modal for `POST /products/duplicate` with `copy_meta` / `copy_images` checkboxes; scope is **selected rows only** (no "all filtered" to avoid accidentally creating thousands of drafts); partial-failure banner
 - `useBulkDelete` / `useBulkDuplicate` React Query hooks; `api/products.ts` gains `bulkDeleteProducts` and `bulkDuplicateProducts`, each covered by Vitest in `api/__tests__/`
+- **Bulk duplicate success notice** — StatusBar displays a dismissible summary ("Created N duplicates (draft)" with error count if partial failure) after bulk duplicate completes (Issue #41)
 - `ChangeHistoryPanel` renders `_deleted` and `_duplicated` audit events (duplicated entries link to both source and new draft)
 
 ### Done (Frontend Change History — Issue #24)
@@ -90,7 +91,7 @@ WordPress/WooCommerce plugin for bulk editing products. Hybrid approach: "previe
 ### Done (Tests — partial)
 - PHPUnit scaffolding with Unit + Integration suites
 - Unit tests: `ContainerTest`, `FieldRegistryTest`, `FieldTypeTest`, all 6 core field tests (Name/Sku/RegularPrice/SalePrice/StockQuantity/Status), `QueryBuilderTest`, all 6 operator tests
-- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest`, `ProductsControllerDeleteTest`, `ProductsControllerDuplicateTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`, `DatabaseMigratorTest`, `ChangeLogRepositoryTest`, `ChangelogControllerTest`
+- Integration tests: `PluginTest`, `FieldsControllerTest`, `ProductsControllerTest` (includes batch save tests with real products, nonexistent-ID error handling, and optimistic-lock conflict detection via stale `post_modified`), `ProductsControllerDeleteTest`, `ProductsControllerDuplicateTest`, `FilterParserTest`, `QueryBuilderTest`, `LikeOperatorTest`, `NotLikeOperatorTest`, `CapabilityCheckerTest`, `RateLimiterTest`, `DatabaseMigratorTest`, `ChangeLogRepositoryTest`, `ChangelogControllerTest`
 - Integration test bootstrap (`tests/Integration/bootstrap.php`) loads WooCommerce **before** the plugin under test so tests that instantiate `WC_Product` no longer error with "Class not found"
 - Frontend: Vitest configured; `useChangesStore.test.ts` (store coverage), `ProductGrid/__tests__/bulkOperations.test.ts` (all bulk operation appliers including sale-price base-value path), `bulkDuplicate/__tests__/BulkDuplicateConfirmModal.test.tsx` (modal interaction), and `api/__tests__/bulkDeleteProducts.test.ts` / `bulkDuplicateProducts.test.ts` (API client payloads)
 - E2E: directory exists, no Playwright tests yet
@@ -333,7 +334,7 @@ Endpoints and status:
 |--------|----------|--------|
 | `GET` | `/fields` | Implemented |
 | `POST` | `/products/query` | Implemented |
-| `PUT` | `/products/batch` | Implemented (BatchSaver + ProductSaver, optimistic locking, writes audit log) |
+| `PUT` | `/products/batch` | Implemented (BatchSaver + ProductSaver, optimistic locking with `post_modified` conflict detection, writes audit log; error responses include typed `code` keys: `wbm_not_found`, `wbm_conflict`, `wbm_unknown_field`, `wbm_not_editable`, `wbm_no_setter`, `wbm_validation_error`, `wbm_save_failed`) |
 | `DELETE` | `/products/batch` | Implemented (Issue #23 — `Operations\BulkDelete`, `mode=trash\|permanent`, route enforces `delete_products`, variation cascade for variable products, audit-logged as `_deleted`, `variation_errors` separate counter) |
 | `POST` | `/products/duplicate` | Implemented (Issue #41 — wraps WC core duplicator, `copy_meta`/`copy_images` flags, max 100 IDs/req, audit-logged as `_duplicated`) |
 | `GET` | `/changelog` | Implemented (filters, pagination) |
