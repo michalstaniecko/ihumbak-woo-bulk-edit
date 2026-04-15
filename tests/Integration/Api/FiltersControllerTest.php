@@ -8,6 +8,7 @@ use IhumbakWooBulkEdit\Api\FiltersController;
 use IhumbakWooBulkEdit\Fields\FieldRegistry;
 use IhumbakWooBulkEdit\Persistence\DatabaseMigrator;
 use IhumbakWooBulkEdit\Persistence\SavedFiltersRepository;
+use IhumbakWooBulkEdit\Query\FilterDefinitionValidator;
 use IhumbakWooBulkEdit\Security\CapabilityChecker;
 use WP_REST_Request;
 use WP_UnitTestCase;
@@ -32,7 +33,7 @@ final class FiltersControllerTest extends WP_UnitTestCase
             $controller = new FiltersController(
                 $this->repo,
                 new CapabilityChecker(),
-                new FieldRegistry(),
+                new FilterDefinitionValidator(),
             );
             $controller->register_routes();
         });
@@ -59,7 +60,13 @@ final class FiltersControllerTest extends WP_UnitTestCase
 
     private function validDefinition(): array
     {
-        return ['filters' => [], 'search' => '', 'sort' => ['field' => 'name', 'order' => 'asc']];
+        return [
+            'filters' => [
+                ['field' => 'name', 'operator' => '=', 'value' => 'test'],
+            ],
+            'search' => '',
+            'sort' => ['field' => 'name', 'order' => 'asc'],
+        ];
     }
 
     // ── Test 1 ─────────────────────────────────────────────────
@@ -332,6 +339,159 @@ final class FiltersControllerTest extends WP_UnitTestCase
         $getRequest = new WP_REST_Request('GET', '/ihumbak-woo-bulk-edit/v1/filters');
         $getResponse = rest_get_server()->dispatch($getRequest);
         self::assertCount(0, $getResponse->get_data()['items']);
+    }
+
+    // ── Test 13: FilterGroup tree round-trip ────────────────────────────────────
+
+    public function test_post_filter_with_group_tree_definition_round_trips(): void
+    {
+        $userId = $this->createEditorUser();
+        wp_set_current_user($userId);
+
+        $groupDefinition = [
+            'filters' => [
+                'type'       => 'group',
+                'combinator' => 'AND',
+                'children'   => [
+                    ['type' => 'condition', 'field' => 'name', 'operator' => 'LIKE', 'value' => 'shirt'],
+                ],
+            ],
+            'search' => '',
+        ];
+
+        $request = new WP_REST_Request('POST', '/ihumbak-woo-bulk-edit/v1/filters');
+        $request->set_header('Content-Type', 'application/json');
+        $request->set_body(wp_json_encode([
+            'name'       => 'Group Tree Filter',
+            'definition' => $groupDefinition,
+            'is_shared'  => false,
+        ]));
+        $response = rest_get_server()->dispatch($request);
+        $data = $response->get_data();
+
+        self::assertSame(201, $response->get_status());
+        self::assertArrayHasKey('definition', $data);
+
+        // The filters key should come back as a group tree (not a flat array)
+        $returnedFilters = $data['definition']['filters'];
+        self::assertIsArray($returnedFilters);
+        self::assertSame('group', $returnedFilters['type']);
+        self::assertSame('AND', $returnedFilters['combinator']);
+    }
+
+    // ── Test 14: OR root round-trip ───────────────────────────────────────────
+
+    public function test_post_filter_with_OR_root_round_trips(): void
+    {
+        $userId = $this->createEditorUser();
+        wp_set_current_user($userId);
+
+        $orDefinition = [
+            'filters' => [
+                'type'       => 'group',
+                'combinator' => 'OR',
+                'children'   => [
+                    ['type' => 'condition', 'field' => 'name', 'operator' => '=', 'value' => 'A'],
+                    ['type' => 'condition', 'field' => 'name', 'operator' => '=', 'value' => 'B'],
+                ],
+            ],
+            'search' => '',
+        ];
+
+        $request = new WP_REST_Request('POST', '/ihumbak-woo-bulk-edit/v1/filters');
+        $request->set_header('Content-Type', 'application/json');
+        $request->set_body(wp_json_encode([
+            'name'       => 'OR Root Filter',
+            'definition' => $orDefinition,
+            'is_shared'  => false,
+        ]));
+        $response = rest_get_server()->dispatch($request);
+        $data = $response->get_data();
+
+        self::assertSame(201, $response->get_status());
+        $returnedFilters = $data['definition']['filters'];
+        self::assertSame('group', $returnedFilters['type']);
+        self::assertSame('OR', $returnedFilters['combinator']);
+    }
+
+    // ── Test 15: Empty definition rejected ────────────────────────────────────
+
+    public function test_post_filter_with_empty_filters_rejected(): void
+    {
+        $userId = $this->createEditorUser();
+        wp_set_current_user($userId);
+
+        $request = new WP_REST_Request('POST', '/ihumbak-woo-bulk-edit/v1/filters');
+        $request->set_header('Content-Type', 'application/json');
+        $request->set_body(wp_json_encode([
+            'name'       => 'Empty Filter',
+            'definition' => ['filters' => [], 'search' => ''],
+            'is_shared'  => false,
+        ]));
+        $response = rest_get_server()->dispatch($request);
+
+        self::assertSame(400, $response->get_status());
+        $data = $response->get_data();
+        self::assertSame('wbm_filter_empty', $data['code']);
+    }
+
+    // ── Test 16: Depth > 5 rejected ──────────────────────────────────────────
+
+    public function test_post_filter_with_depth_exceeding_5_rejected(): void
+    {
+        $userId = $this->createEditorUser();
+        wp_set_current_user($userId);
+
+        // Build 6 levels deep
+        $innermost = [
+            'type'       => 'group',
+            'combinator' => 'AND',
+            'children'   => [
+                ['type' => 'condition', 'field' => 'name', 'operator' => '=', 'value' => 'leaf'],
+            ],
+        ];
+        $node = $innermost;
+        for ($i = 0; $i < 5; $i++) {
+            $node = ['type' => 'group', 'combinator' => 'AND', 'children' => [$node]];
+        }
+
+        $request = new WP_REST_Request('POST', '/ihumbak-woo-bulk-edit/v1/filters');
+        $request->set_header('Content-Type', 'application/json');
+        $request->set_body(wp_json_encode([
+            'name'       => 'Too Deep',
+            'definition' => ['filters' => $node, 'search' => ''],
+            'is_shared'  => false,
+        ]));
+        $response = rest_get_server()->dispatch($request);
+
+        self::assertSame(400, $response->get_status());
+        $data = $response->get_data();
+        self::assertSame('wbm_filter_too_deep', $data['code']);
+    }
+
+    // ── Test 17: Legacy flat list still accepted ──────────────────────────────
+
+    public function test_post_filter_legacy_flat_list_accepted(): void
+    {
+        $userId = $this->createEditorUser();
+        wp_set_current_user($userId);
+
+        $request = new WP_REST_Request('POST', '/ihumbak-woo-bulk-edit/v1/filters');
+        $request->set_header('Content-Type', 'application/json');
+        $request->set_body(wp_json_encode([
+            'name'       => 'Legacy Flat',
+            'definition' => [
+                'filters' => [
+                    ['field' => 'name', 'operator' => 'LIKE', 'value' => 'shirt'],
+                    ['field' => 'sku', 'operator' => '=', 'value' => 'SKU-1'],
+                ],
+                'search' => '',
+            ],
+            'is_shared'  => false,
+        ]));
+        $response = rest_get_server()->dispatch($request);
+
+        self::assertSame(201, $response->get_status());
     }
 
     // ── Test 12 ────────────────────────────────────────────────

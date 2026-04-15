@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace IhumbakWooBulkEdit\Api;
 
 use IhumbakWooBulkEdit\Persistence\SavedFiltersRepository;
+use IhumbakWooBulkEdit\Query\FilterDefinitionValidator;
 use IhumbakWooBulkEdit\Security\CapabilityChecker;
 use WP_Error;
 use WP_REST_Request;
@@ -29,6 +30,7 @@ final class FiltersController extends RestController
     public function __construct(
         private readonly SavedFiltersRepository $repository,
         private readonly CapabilityChecker $capabilityChecker,
+        private readonly FilterDefinitionValidator $definitionValidator = new FilterDefinitionValidator(),
     ) {}
 
     public function register_routes(): void
@@ -99,6 +101,13 @@ final class FiltersController extends RestController
             );
         }
 
+        $validationError = $this->definitionValidator->validate($definitionParam);
+        if ($validationError !== null) {
+            $errData = $validationError->get_error_data() ?? [];
+            $status  = is_array($errData) && isset($errData['status']) ? (int) $errData['status'] : 400;
+            return $this->error($validationError->get_error_code(), $validationError->get_error_message(), $status);
+        }
+
         $isShared = (bool) ($request->get_param('is_shared') ?? false);
 
         // Sharing requires manage_woocommerce.
@@ -149,6 +158,15 @@ final class FiltersController extends RestController
                 __('Filter definition must be an object.', 'ihumbak-woo-bulk-edit'),
                 400
             );
+        }
+
+        if (is_array($definitionParam)) {
+            $validationError = $this->definitionValidator->validate($definitionParam);
+            if ($validationError !== null) {
+                $errData = $validationError->get_error_data() ?? [];
+                $status  = is_array($errData) && isset($errData['status']) ? (int) $errData['status'] : 400;
+                return $this->error($validationError->get_error_code(), $validationError->get_error_message(), $status);
+            }
         }
 
         $isShared = $request->get_param('is_shared');

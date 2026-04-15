@@ -22,6 +22,7 @@ use IhumbakWooBulkEdit\Persistence\DatabaseMigrator;
 use IhumbakWooBulkEdit\Persistence\ProductSaver;
 use IhumbakWooBulkEdit\Persistence\SavedFiltersRepository;
 use IhumbakWooBulkEdit\Persistence\UserPreferencesRepository;
+use IhumbakWooBulkEdit\Query\FilterDefinitionValidator;
 use IhumbakWooBulkEdit\Query\VariationsRepository;
 use IhumbakWooBulkEdit\Security\CapabilityChecker;
 use IhumbakWooBulkEdit\Security\RateLimiter;
@@ -233,10 +234,16 @@ final class Plugin
         );
 
         $this->container->set(
+            FilterDefinitionValidator::class,
+            static fn (Container $c): FilterDefinitionValidator => new FilterDefinitionValidator()
+        );
+
+        $this->container->set(
             FiltersController::class,
             static fn (Container $c): FiltersController => new FiltersController(
                 $c->get(SavedFiltersRepository::class),
                 $c->get(CapabilityChecker::class),
+                $c->get(FilterDefinitionValidator::class),
             )
         );
 

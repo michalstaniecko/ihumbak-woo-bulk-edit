@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useFiltersStore, legacyFiltersToGroup, selectLegacyFilters } from '../useFiltersStore';
+import { useFiltersStore, legacyFiltersToGroup, selectLegacyFilters, isEmptyRoot, selectIsComplex } from '../useFiltersStore';
 import type { FilterCondition, FilterGroup } from '@/types/api';
 
 function getState() {
@@ -182,6 +182,66 @@ describe( 'legacyFiltersToGroup', () => {
 	it( 'returns empty AND group for empty input', () => {
 		const result = legacyFiltersToGroup( [] );
 		expect( result.children ).toHaveLength( 0 );
+	} );
+} );
+
+describe( 'isEmptyRoot', () => {
+	it( 'returns true for a root with no children', () => {
+		const root: FilterGroup = { type: 'group', combinator: 'AND', children: [] };
+		expect( isEmptyRoot( root ) ).toBe( true );
+	} );
+
+	it( 'returns false for a root that has at least one child', () => {
+		const root: FilterGroup = {
+			type: 'group',
+			combinator: 'AND',
+			children: [ condA ],
+		};
+		expect( isEmptyRoot( root ) ).toBe( false );
+	} );
+
+	it( 'returns false for an OR root with children', () => {
+		const root: FilterGroup = {
+			type: 'group',
+			combinator: 'OR',
+			children: [ condA ],
+		};
+		expect( isEmptyRoot( root ) ).toBe( false );
+	} );
+} );
+
+describe( 'selectIsComplex', () => {
+	it( 'returns false for a simple flat AND root', () => {
+		const root: FilterGroup = {
+			type: 'group',
+			combinator: 'AND',
+			children: [ condA, condB ],
+		};
+		expect( selectIsComplex( root ) ).toBe( false );
+	} );
+
+	it( 'returns true when root combinator is OR', () => {
+		const root: FilterGroup = {
+			type: 'group',
+			combinator: 'OR',
+			children: [ condA, condB ],
+		};
+		expect( selectIsComplex( root ) ).toBe( true );
+	} );
+
+	it( 'returns true when root has a nested group child', () => {
+		const nested: FilterGroup = { type: 'group', combinator: 'OR', children: [ condA ] };
+		const root: FilterGroup = {
+			type: 'group',
+			combinator: 'AND',
+			children: [ condB, nested ],
+		};
+		expect( selectIsComplex( root ) ).toBe( true );
+	} );
+
+	it( 'returns false for an empty AND root', () => {
+		const root: FilterGroup = { type: 'group', combinator: 'AND', children: [] };
+		expect( selectIsComplex( root ) ).toBe( false );
 	} );
 } );
 

@@ -2,23 +2,20 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { __ } from '@wordpress/i18n';
 import {
 	useSavedFilters,
-	useCreateSavedFilter,
 	useUpdateSavedFilter,
 	useDeleteSavedFilter,
 } from '@/hooks/useSavedFilters';
+import { useSaveCurrentFilter, isEffectivelyEmpty } from '@/hooks/useSaveCurrentFilter';
 import { useRecentFiltersStore } from '@/store/useRecentFiltersStore';
+import { useFiltersStore } from '@/store/useFiltersStore';
 import { SaveFilterDialog } from './SaveFilterDialog';
-import type { ProductFilter, SavedFilter, SavedFilterDefinition } from '@/types/api';
+import type { SavedFilter, SavedFilterDefinition } from '@/types/api';
 
 export interface SavedFiltersMenuProps {
-	currentFilters: ProductFilter[];
-	currentSearch: string;
 	onApplyPreset: ( definition: SavedFilterDefinition ) => void;
 }
 
 export function SavedFiltersMenu( {
-	currentFilters,
-	currentSearch,
 	onApplyPreset,
 }: SavedFiltersMenuProps ): JSX.Element {
 	const [ isOpen, setIsOpen ] = useState( false );
@@ -27,15 +24,23 @@ export function SavedFiltersMenu( {
 	const [ saveError, setSaveError ] = useState< string | undefined >( undefined );
 	const dropdownRef = useRef< HTMLDivElement >( null );
 
+	// Read current filter state directly from Zustand — avoids stale prop caching.
+	const { root, searchQuery } = useFiltersStore();
+
 	const { data: savedFiltersData } = useSavedFilters();
-	const createMutation = useCreateSavedFilter();
 	const updateMutation = useUpdateSavedFilter();
 	const deleteMutation = useDeleteSavedFilter();
+	const { save: saveCurrentFilter, isSaving } = useSaveCurrentFilter();
 
 	const { recents, touch } = useRecentFiltersStore();
 
 	const myFilters = ( savedFiltersData?.items ?? [] ).filter( ( f ) => ! f.is_shared );
 	const teamFilters = ( savedFiltersData?.items ?? [] ).filter( ( f ) => f.is_shared );
+
+	// Disable "Save current filter" when nothing meaningful is active.
+	// isEffectivelyEmpty strips empty nested groups before checking, so a root
+	// with only empty groups (accidentally added) is treated as empty.
+	const isSaveDisabled = isEffectivelyEmpty( root ) && searchQuery.trim() === '';
 
 	// Close on outside click
 	useEffect( () => {
@@ -82,21 +87,7 @@ export function SavedFiltersMenu( {
 		async ( name: string, isShared: boolean ) => {
 			setSaveError( undefined );
 			try {
-				const definition: SavedFilterDefinition = {
-					filters: currentFilters,
-					search: currentSearch,
-				};
-				const created = await createMutation.mutateAsync( {
-					name,
-					definition,
-					is_shared: isShared,
-				} );
-				touch( {
-					id: created.id,
-					name: created.name,
-					definition: created.definition,
-					usedAt: Date.now(),
-				} );
+				await saveCurrentFilter( { name, isShared, root, search: searchQuery } );
 				setShowSaveDialog( false );
 				setIsOpen( false );
 			} catch ( err ) {
@@ -105,7 +96,7 @@ export function SavedFiltersMenu( {
 				}
 			}
 		},
-		[ currentFilters, currentSearch, createMutation, touch ]
+		[ saveCurrentFilter, root, searchQuery ]
 	);
 
 	const handleRename = useCallback(
@@ -298,6 +289,7 @@ export function SavedFiltersMenu( {
 						<button
 							type="button"
 							className="iwbe-saved-filters-save-btn button"
+							disabled={ isSaveDisabled }
 							onClick={ () => {
 								setShowSaveDialog( true );
 								setIsOpen( false );
@@ -316,7 +308,7 @@ export function SavedFiltersMenu( {
 						setShowSaveDialog( false );
 						setSaveError( undefined );
 					} }
-					isSaving={ createMutation.isPending }
+					isSaving={ isSaving }
 					errorMessage={ saveError }
 				/>
 			) }

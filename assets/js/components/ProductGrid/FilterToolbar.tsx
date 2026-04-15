@@ -2,11 +2,13 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { __ } from '@wordpress/i18n';
 import type { Field, ProductFilter, FilterOperator, SavedFilterDefinition, TaxonomyTermDetail, FilterCondition } from '@/types/api';
 import { SavedFiltersMenu } from './SavedFiltersMenu';
+import { SaveFilterDialog } from './SavedFiltersMenu/SaveFilterDialog';
 import { TaxonomyTermPicker } from './TaxonomyTermPicker';
 import { useTaxonomyTermLabels } from '@/hooks/useTaxonomyTerms';
 import { ColumnVisibilityMenu } from './ColumnVisibilityMenu';
 import { FilterGroupBuilder } from './FilterGroupBuilder';
 import { useFiltersStore } from '@/store/useFiltersStore';
+import { useSaveCurrentFilter, isEffectivelyEmpty } from '@/hooks/useSaveCurrentFilter';
 
 interface FilterToolbarProps {
 	fields: Field[];
@@ -297,15 +299,26 @@ export function FilterToolbar( {
 	// ── Filter Builder modal state ──────────────────────────────────────────────
 
 	const [ builderOpen, setBuilderOpen ] = useState( false );
+	const [ builderSaveDialogOpen, setBuilderSaveDialogOpen ] = useState( false );
+	const [ builderSaveError, setBuilderSaveError ] = useState< string | undefined >( undefined );
 
 	const {
 		root,
+		searchQuery: storeSearchQuery,
 		addCondition,
 		addGroup,
 		removeNode,
 		updateCondition,
 		setCombinator,
 	} = useFiltersStore();
+
+	const { save: saveCurrentFilter, isSaving: isSavingFromBuilder } = useSaveCurrentFilter();
+
+	const closeBuilder = () => {
+		setBuilderOpen( false );
+		setBuilderSaveDialogOpen( false );
+		setBuilderSaveError( undefined );
+	};
 
 	const hasNestedGroups = root.children.some( ( c ) => c.type === 'group' );
 	const isComplex = root.combinator === 'OR' || hasNestedGroups;
@@ -339,7 +352,7 @@ export function FilterToolbar( {
 							<button
 								type="button"
 								className="iwbe-filter-builder-modal-close"
-								onClick={ () => setBuilderOpen( false ) }
+								onClick={ closeBuilder }
 								aria-label={ __( 'Close filter builder', 'ihumbak-woo-bulk-edit' ) }
 							>
 								×
@@ -362,14 +375,50 @@ export function FilterToolbar( {
 						<div className="iwbe-filter-builder-modal-footer">
 							<button
 								type="button"
+								className="button"
+								onClick={ () => setBuilderSaveDialogOpen( true ) }
+								disabled={ isEffectivelyEmpty( root ) }
+							>
+								{ __( 'Save as\u2026', 'ihumbak-woo-bulk-edit' ) }
+							</button>
+							<button
+								type="button"
 								className="button button-primary"
-								onClick={ () => setBuilderOpen( false ) }
+								onClick={ closeBuilder }
 							>
 								{ __( 'Done', 'ihumbak-woo-bulk-edit' ) }
 							</button>
 						</div>
 					</div>
 				</div>
+			) }
+
+			{ builderSaveDialogOpen && (
+				<SaveFilterDialog
+					onSave={ async ( name, isShared ) => {
+						setBuilderSaveError( undefined );
+						try {
+							await saveCurrentFilter( {
+								name,
+								isShared,
+								root,
+								search: storeSearchQuery,
+							} );
+							setBuilderSaveDialogOpen( false );
+							// Builder intentionally stays open after saving.
+						} catch ( err ) {
+							setBuilderSaveError(
+								err instanceof Error ? err.message : String( err )
+							);
+						}
+					} }
+					onCancel={ () => {
+						setBuilderSaveDialogOpen( false );
+						setBuilderSaveError( undefined );
+					} }
+					isSaving={ isSavingFromBuilder }
+					errorMessage={ builderSaveError }
+				/>
 			) }
 
 			<div className="iwbe-filter-toolbar-row">
@@ -464,8 +513,6 @@ export function FilterToolbar( {
 				</div>
 
 				<SavedFiltersMenu
-					currentFilters={ filters }
-					currentSearch={ searchQuery }
 					onApplyPreset={ onApplyPreset }
 				/>
 

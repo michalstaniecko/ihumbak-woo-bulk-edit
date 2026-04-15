@@ -56,6 +56,24 @@ function updateNodeAtPath(
 	);
 }
 
+// ── isEmptyRoot / selectIsComplex ─────────────────────────────────────────────
+
+/**
+ * Returns true when the root group has no children (nothing to save).
+ */
+export function isEmptyRoot( root: FilterGroup ): boolean {
+	return root.children.length === 0;
+}
+
+/**
+ * Returns true when the root uses OR logic or contains at least one nested group.
+ * A "complex" tree cannot be represented as a flat ProductFilter[] array and must
+ * be serialized as a FilterGroup tree when saving a filter preset.
+ */
+export function selectIsComplex( root: FilterGroup ): boolean {
+	return root.combinator === 'OR' || root.children.some( ( c ) => c.type === 'group' );
+}
+
 // ── selectLegacyFilters ───────────────────────────────────────────────────────
 
 /**
