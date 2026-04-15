@@ -1811,3 +1811,451 @@
 	height: auto;
 	line-height: 1.6;
 }
+
+/* ── Filter Builder Modal (Issue #19) ─────────────────────── */
+
+.iwbe-filter-builder-modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	z-index: 100001;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.5);
+}
+
+.iwbe-filter-builder-modal {
+	position: relative;
+	width: min(720px, 95vw);
+	max-height: 90vh;
+	background: #fff;
+	border-radius: 4px;
+	box-shadow: 0 16px 48px rgba(0, 0, 0, 0.25);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+}
+
+.iwbe-filter-builder-modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 14px 20px;
+	border-bottom: 1px solid #dcdcde;
+	background: #f6f7f7;
+	flex-shrink: 0;
+}
+
+.iwbe-filter-builder-modal-header h2 {
+	margin: 0;
+	font-size: 16px;
+	font-weight: 600;
+	color: #1d2327;
+}
+
+.iwbe-filter-builder-modal-close {
+	background: none;
+	border: none;
+	font-size: 24px;
+	line-height: 1;
+	cursor: pointer;
+	padding: 0 4px;
+	color: #50575e;
+}
+
+.iwbe-filter-builder-modal-close:hover {
+	color: #1d2327;
+}
+
+.iwbe-filter-builder-modal-body {
+	flex: 1;
+	overflow: auto;
+	padding: 18px 20px;
+}
+
+.iwbe-filter-builder-modal-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	padding: 12px 20px;
+	border-top: 1px solid #dcdcde;
+	background: #f6f7f7;
+	flex-shrink: 0;
+}
+
+/* ── Filter Group (Issue #19) ─────────────────────────────── */
+
+.iwbe-filter-group {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.iwbe-filter-group--depth-0 {
+	padding: 0;
+	background: transparent;
+	border: none;
+}
+
+.iwbe-filter-group--depth-1,
+.iwbe-filter-group--depth-2,
+.iwbe-filter-group--depth-3,
+.iwbe-filter-group--depth-4,
+.iwbe-filter-group--depth-5 {
+	padding: 10px 12px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-left: 3px solid #2271b1;
+	border-radius: 3px;
+}
+
+.iwbe-filter-group--depth-2,
+.iwbe-filter-group--depth-4 {
+	background: #fff;
+}
+
+.iwbe-filter-group-header {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+
+.iwbe-filter-group-children {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding-left: 8px;
+	border-left: 2px solid #f0f0f1;
+	margin-left: 4px;
+}
+
+.iwbe-filter-group--depth-0 > .iwbe-filter-group-children {
+	padding-left: 0;
+	border-left: none;
+	margin-left: 0;
+}
+
+.iwbe-filter-group-actions {
+	display: flex;
+	gap: 8px;
+	flex-wrap: wrap;
+	margin-top: 4px;
+}
+
+.iwbe-filter-group-remove-btn {
+	margin-left: auto;
+	padding: 2px 10px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	background: #fff;
+	color: #d63638;
+	font-size: 12px;
+	line-height: 1.6;
+	cursor: pointer;
+}
+
+.iwbe-filter-group-remove-btn:hover {
+	border-color: #d63638;
+	background: #fcf0f1;
+}
+
+/* ── Combinator (AND/OR) toggle (Issue #19) ───────────────── */
+
+.iwbe-combinator-label {
+	font-size: 11px;
+	font-weight: 600;
+	color: #646970;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	margin-right: 2px;
+}
+
+.iwbe-combinator-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 3px 12px;
+	border: 1px solid #c3c4c7;
+	background: #fff;
+	color: #50575e;
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.6;
+	cursor: pointer;
+	min-width: 44px;
+}
+
+.iwbe-combinator-btn + .iwbe-combinator-btn {
+	margin-left: -1px;
+}
+
+.iwbe-combinator-btn:first-of-type {
+	border-top-left-radius: 3px;
+	border-bottom-left-radius: 3px;
+}
+
+.iwbe-combinator-btn:last-of-type {
+	border-top-right-radius: 3px;
+	border-bottom-right-radius: 3px;
+}
+
+.iwbe-combinator-btn:hover:not(.iwbe-combinator-btn--active) {
+	background: #f0f0f1;
+	color: #2271b1;
+	border-color: #2271b1;
+	z-index: 1;
+}
+
+.iwbe-combinator-btn--active {
+	background: #2271b1;
+	border-color: #2271b1;
+	color: #fff;
+	z-index: 2;
+}
+
+.iwbe-combinator-btn--active:hover {
+	background: #135e96;
+	border-color: #135e96;
+}
+
+/* ── Filter Condition Row (Issue #19) ─────────────────────── */
+
+.iwbe-filter-condition-row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	padding: 6px 8px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 3px;
+}
+
+.iwbe-condition-field-select,
+.iwbe-condition-operator-select {
+	padding: 4px 8px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	font-size: 13px;
+	line-height: 1.6;
+	background: #fff;
+	color: #2c3338;
+}
+
+.iwbe-condition-field-select {
+	flex: 0 1 180px;
+	min-width: 140px;
+}
+
+.iwbe-condition-operator-select {
+	flex: 0 1 160px;
+	min-width: 120px;
+}
+
+.iwbe-condition-field-select:focus,
+.iwbe-condition-operator-select:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+	outline: none;
+}
+
+.iwbe-condition-value-input {
+	flex: 1 1 160px;
+	min-width: 120px;
+	padding: 4px 8px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	font-size: 13px;
+	line-height: 1.6;
+	background: #fff;
+	color: #2c3338;
+}
+
+.iwbe-condition-value-input:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+	outline: none;
+}
+
+.iwbe-condition-value-input::placeholder {
+	color: #a7aaad;
+}
+
+.iwbe-tag-input {
+	flex: 1 1 200px;
+	min-width: 160px;
+	padding: 4px 8px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	font-size: 13px;
+	line-height: 1.5;
+	background: #fff;
+	color: #2c3338;
+	font-family: inherit;
+	resize: vertical;
+}
+
+.iwbe-tag-input:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+	outline: none;
+}
+
+.iwbe-tag-input::placeholder {
+	color: #a7aaad;
+}
+
+.iwbe-condition-range {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	flex: 1 1 200px;
+	min-width: 180px;
+}
+
+.iwbe-condition-range-min,
+.iwbe-condition-range-max {
+	flex: 1 1 80px;
+	min-width: 70px;
+	padding: 4px 8px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	font-size: 13px;
+	line-height: 1.6;
+	background: #fff;
+	color: #2c3338;
+}
+
+.iwbe-condition-range-min:focus,
+.iwbe-condition-range-max:focus {
+	border-color: #2271b1;
+	box-shadow: 0 0 0 1px #2271b1;
+	outline: none;
+}
+
+.iwbe-range-sep {
+	color: #646970;
+	font-size: 13px;
+	user-select: none;
+}
+
+.iwbe-condition-remove-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+	width: 22px;
+	height: 22px;
+	margin-left: auto;
+	padding: 0;
+	border: 1px solid transparent;
+	border-radius: 50%;
+	background: transparent;
+	color: #646970;
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.iwbe-condition-remove-btn:hover {
+	background: #d63638;
+	border-color: #d63638;
+	color: #fff;
+}
+
+/* ── Filter Group Add Buttons (Issue #19) ─────────────────── */
+
+.iwbe-filter-add-condition-btn,
+.iwbe-filter-add-group-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 12px;
+	border: 1px dashed #c3c4c7;
+	border-radius: 3px;
+	background: #f6f7f7;
+	color: #2271b1;
+	font-size: 12px;
+	line-height: 1.6;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.iwbe-filter-add-condition-btn:hover:not(:disabled),
+.iwbe-filter-add-group-btn:hover:not(:disabled) {
+	background: #f0f6fc;
+	border-color: #2271b1;
+	border-style: solid;
+}
+
+.iwbe-filter-add-group-btn:disabled {
+	color: #a7aaad;
+	border-color: #dcdcde;
+	cursor: not-allowed;
+	background: #f6f7f7;
+}
+
+/* ── Complex filter summary chip (Issue #19) ──────────────── */
+
+.iwbe-filter-chips--complex {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.iwbe-complex-filter-summary {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 10px;
+	background: #e5f5fa;
+	border: 1px solid #c3dce8;
+	border-radius: 3px;
+	font-size: 12px;
+	line-height: 1.6;
+	color: #1d2327;
+	font-weight: 600;
+}
+
+.iwbe-filter-builder-edit-btn {
+	padding: 2px 10px;
+	border: 1px solid #2271b1;
+	border-radius: 3px;
+	background: #fff;
+	color: #2271b1;
+	font-size: 12px;
+	line-height: 1.6;
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.iwbe-filter-builder-edit-btn:hover {
+	background: #2271b1;
+	color: #fff;
+}
+
+/* ── Filter Builder trigger button (Issue #19) ────────────── */
+
+.iwbe-filter-builder-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px 12px;
+	border: 1px solid #c3c4c7;
+	border-radius: 3px;
+	background: #f6f7f7;
+	color: #2271b1;
+	font-size: 13px;
+	line-height: 1.6;
+	cursor: pointer;
+	white-space: nowrap;
+}
+
+.iwbe-filter-builder-btn:hover {
+	background: #f0f0f1;
+	border-color: #2271b1;
+}
