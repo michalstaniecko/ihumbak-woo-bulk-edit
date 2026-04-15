@@ -9,6 +9,7 @@ import {
 	type BulkOperation,
 	type BulkOperationKind,
 	type NumericOperation,
+	type SpecialEnding,
 	type TextOperation,
 	type BooleanOperation,
 	type TaxonomyOperation,
@@ -55,6 +56,8 @@ export function BulkEditModal( {
 	const [ numericBase, setNumericBase ] = useState< NumericBase >(
 		'current_sale_price'
 	);
+	const [ specialEnding, setSpecialEnding ] =
+		useState< SpecialEnding >( 'none' );
 	const [ textOp, setTextOp ] = useState< TextOperation | null >( null );
 	const [ booleanOp, setBooleanOp ] = useState< BooleanOperation | null >(
 		null
@@ -81,9 +84,14 @@ export function BulkEditModal( {
 		return () => window.removeEventListener( 'keydown', handler );
 	}, [ onClose ] );
 
+	// Reset special ending when the target field changes.
+	useEffect( () => {
+		setSpecialEnding( 'none' );
+	}, [ field ] );
+
 	useEffect( () => {
 		setNotice( null );
-	}, [ numericOp, textOp, booleanOp, taxonomyOp, numericBase, scope ] );
+	}, [ numericOp, textOp, booleanOp, taxonomyOp, numericBase, specialEnding, scope ] );
 
 	const currentOperation: BulkOperation | null = useMemo( () => {
 		if ( kind === 'numeric' && numericOp ) {
@@ -143,7 +151,16 @@ export function BulkEditModal( {
 						currentValue,
 						operation.op,
 						field,
-						regularBaseNum
+						regularBaseNum,
+						specialEnding
+					);
+				} else if ( operation.kind === 'numeric' ) {
+					newValue = applyNumericOperation(
+						currentValue,
+						operation.op,
+						field,
+						undefined,
+						specialEnding
 					);
 				} else {
 					newValue = applyBulkOperation(
@@ -159,7 +176,7 @@ export function BulkEditModal( {
 			}
 			return { applied, skipped };
 		},
-		[ field, getChangedValue, setChange, numericBase ]
+		[ field, getChangedValue, setChange, numericBase, specialEnding ]
 	);
 
 	const handleApply = async (): Promise< void > => {
@@ -230,9 +247,10 @@ export function BulkEditModal( {
 			return (
 				<NumericBulkForm
 					field={ field }
-					onChange={ ( op, nextBase ) => {
+					onChange={ ( op, nextBase, nextEnding ) => {
 						setNumericOp( op );
 						setNumericBase( nextBase );
+						setSpecialEnding( nextEnding );
 					} }
 				/>
 			);

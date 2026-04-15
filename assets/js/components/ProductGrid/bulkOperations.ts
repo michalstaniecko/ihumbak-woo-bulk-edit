@@ -1,5 +1,67 @@
 import type { Field, TaxonomyTerm } from '@/types/api';
 
+/* ── Special ending rounding ───────────────────────────────────────────── */
+
+export type SpecialEnding = 'none' | '00' | '90' | '99' | '9_00';
+
+/**
+ * Round a price UP to the nearest .00, .90, or .99 ending.
+ * Integer-cents math is used throughout to avoid floating-point drift.
+ *
+ * .00  — if fractional part ≠ 0, advance to next integer .00; idempotent otherwise.
+ * .90  — if frac < 90 → same integer .90;
+ *         if frac > 90 → next integer .90;
+ *         if frac == 90 → unchanged.
+ * .99  — if frac == 99 → unchanged; otherwise → same integer .99.
+ * none — passthrough, no change.
+ */
+export function applySpecialEnding(
+	price: number,
+	ending: SpecialEnding
+): number {
+	if ( ending === 'none' ) {
+		return price;
+	}
+
+	// Work in integer cents to avoid floating-point drift.
+	const cents = Math.round( price * 100 );
+	const wholePart = Math.floor( cents / 100 ); // integer part
+	const fracPart = cents % 100; // 0–99
+
+	switch ( ending ) {
+		case '00': {
+			if ( fracPart === 0 ) {
+				return wholePart; // already .00
+			}
+			return wholePart + 1; // round up to next .00
+		}
+		case '90': {
+			if ( fracPart === 90 ) {
+				return wholePart + 0.9; // already .90, unchanged
+			}
+			if ( fracPart < 90 ) {
+				return wholePart + 0.9; // same integer .90
+			}
+			// fracPart > 90 → next integer .90
+			return wholePart + 1 + 0.9;
+		}
+		case '99': {
+			// fracPart === 99 is idempotent — same formula applies either way
+			return wholePart + 0.99;
+		}
+		case '9_00': {
+			// Round UP to nearest integer ending in 9 with zero cents (9, 19, 29, ..., 99, 109, ...).
+			if ( wholePart % 10 === 9 && fracPart === 0 ) {
+				return wholePart; // already X9.00 — idempotent
+			}
+			const effectiveWhole = wholePart + ( fracPart > 0 ? 1 : 0 );
+			const lastDigit = effectiveWhole % 10;
+			const diff = ( 9 - lastDigit + 10 ) % 10;
+			return effectiveWhole + diff;
+		}
+	}
+}
+
 /* ── Operation type unions ─────────────────────────────────────────────── */
 
 export type NumericOperation =
@@ -85,43 +147,53 @@ export function applyNumericOperation(
 	currentValue: unknown,
 	op: NumericOperation,
 	field: Field,
-	baseValue?: unknown
+	baseValue?: unknown,
+	specialEnding: SpecialEnding = 'none'
 ): number | string | null {
 	if ( op.type === 'clear' ) {
 		return field.type === 'price' ? '' : null;
 	}
 
 	if ( op.type === 'set' ) {
-		return formatNumberForField( op.value, field );
+		const raw = op.value;
+		const rounded =
+			field.type === 'price' && specialEnding !== 'none'
+				? applySpecialEnding( raw, specialEnding )
+				: raw;
+		return formatNumberForField( rounded, field );
 	}
 
 	const source = baseValue !== undefined ? baseValue : currentValue;
 	const sourceNum = toFiniteNumber( source );
 	const base = sourceNum ?? 0;
 
+	let result: number;
 	switch ( op.type ) {
 		case 'increase':
-			return formatNumberForField( base + op.amount, field );
+			result = base + op.amount;
+			break;
 		case 'decrease':
-			return formatNumberForField( base - op.amount, field );
+			result = base - op.amount;
+			break;
 		case 'increase_pct':
-			return formatNumberForField(
-				base * ( 1 + op.percent / 100 ),
-				field
-			);
+			result = base * ( 1 + op.percent / 100 );
+			break;
 		case 'decrease_pct':
-			return formatNumberForField(
-				base * ( 1 - op.percent / 100 ),
-				field
-			);
+			result = base * ( 1 - op.percent / 100 );
+			break;
 		case 'round': {
 			const factor = Math.pow( 10, op.precision );
-			return formatNumberForField(
-				Math.round( base * factor ) / factor,
-				field
-			);
+			result = Math.round( base * factor ) / factor;
+			break;
 		}
 	}
+
+	const rounded =
+		field.type === 'price' && specialEnding !== 'none'
+			? applySpecialEnding( result, specialEnding )
+			: result;
+
+	return formatNumberForField( rounded, field );
 }
 
 export function applyTextOperation(

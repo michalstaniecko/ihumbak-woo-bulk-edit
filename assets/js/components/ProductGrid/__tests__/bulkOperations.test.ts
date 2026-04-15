@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
 	applyNumericOperation,
+	applySpecialEnding,
 	applyTextOperation,
 	applyBooleanOperation,
 	applyTaxonomyOperation,
 	inferBulkOperationKind,
+	type SpecialEnding,
 } from '../bulkOperations';
 import type { Field } from '@/types/api';
 
@@ -412,6 +414,154 @@ describe( 'applyTaxonomyOperation', () => {
 				terms: [ { id: 1, name: 'A' } ],
 			} )
 		).toEqual( [ { id: 1, name: 'A' } ] );
+	} );
+} );
+
+describe( 'applySpecialEnding', () => {
+	const cases: [ number, SpecialEnding, number ][] = [
+		// .00 rounding — rounds UP to next integer .00 if fractional
+		[ 12.34, '00', 13.00 ],
+		[ 10.00, '00', 10.00 ],
+		// .90 rounding
+		[ 12.34, '90', 12.90 ],
+		[ 9.55,  '90', 9.90  ],
+		[ 9.95,  '90', 10.90 ],
+		[ 9.90,  '90', 9.90  ],
+		// .99 rounding
+		[ 12.34, '99', 12.99 ],
+		[ 9.55,  '99', 9.99  ],
+		[ 9.99,  '99', 9.99  ],
+		[ 10.00, '99', 10.99 ],
+		[ 0.00,  '99', 0.99  ],
+		// floating-point stability
+		[ 0.30000000000000004, '99', 0.99 ],
+		// x9.00 rounding — rounds UP to nearest integer ending in 9, zero cents
+		[ 5.00,   '9_00',  9.00  ],
+		[ 9.00,   '9_00',  9.00  ],   // idempotent
+		[ 9.01,   '9_00', 19.00  ],
+		[ 9.50,   '9_00', 19.00  ],
+		[ 10.00,  '9_00', 19.00  ],
+		[ 18.99,  '9_00', 19.00  ],
+		[ 19.00,  '9_00', 19.00  ],   // idempotent
+		[ 99.00,  '9_00', 99.00  ],   // idempotent
+		[ 99.01,  '9_00', 109.00 ],
+		[ 100.00, '9_00', 109.00 ],
+	];
+
+	for ( const [ input, ending, expected ] of cases ) {
+		it( `applySpecialEnding(${ input }, '${ ending }') → ${ expected }`, () => {
+			expect( applySpecialEnding( input, ending ) ).toBeCloseTo(
+				expected,
+				10
+			);
+		} );
+	}
+
+	it( 'none is a passthrough', () => {
+		expect( applySpecialEnding( 12.34, 'none' ) ).toBeCloseTo( 12.34, 10 );
+		expect( applySpecialEnding( 9.99, 'none' ) ).toBeCloseTo( 9.99, 10 );
+	} );
+} );
+
+describe( 'applyNumericOperation with specialEnding', () => {
+	const priceField = makeField( { key: 'regular_price', type: 'price' } );
+	const salePriceField = makeField( { key: 'sale_price', type: 'price' } );
+
+	it( 'set 12.34 with ending 99 → "12.99"', () => {
+		expect(
+			applyNumericOperation(
+				'10.00',
+				{ type: 'set', value: 12.34 },
+				priceField,
+				undefined,
+				'99'
+			)
+		).toBe( '12.99' );
+	} );
+
+	it( 'increase 10.00 by 2.34 with ending 99 → "12.99"', () => {
+		expect(
+			applyNumericOperation(
+				'10.00',
+				{ type: 'increase', amount: 2.34 },
+				priceField,
+				undefined,
+				'99'
+			)
+		).toBe( '12.99' );
+	} );
+
+	it( 'increase_pct 100 by 23.4 with ending 00 → "124.00"', () => {
+		expect(
+			applyNumericOperation(
+				'100.00',
+				{ type: 'increase_pct', percent: 23.4 },
+				priceField,
+				undefined,
+				'00'
+			)
+		).toBe( '124.00' );
+	} );
+
+	it( 'decrease_pct 100 by 23.4 with ending 99 → "76.99"', () => {
+		expect(
+			applyNumericOperation(
+				'100.00',
+				{ type: 'decrease_pct', percent: 23.4 },
+				priceField,
+				undefined,
+				'99'
+			)
+		).toBe( '76.99' );
+	} );
+
+	it( 'clear with any ending → "" (no rounding applied)', () => {
+		expect(
+			applyNumericOperation(
+				'10.00',
+				{ type: 'clear' },
+				priceField,
+				undefined,
+				'99'
+			)
+		).toBe( '' );
+	} );
+
+	it( 'specialEnding none leaves price formatting unchanged', () => {
+		expect(
+			applyNumericOperation(
+				'10.00',
+				{ type: 'set', value: 12.34 },
+				priceField,
+				undefined,
+				'none'
+			)
+		).toBe( '12.34' );
+	} );
+
+	it( 'specialEnding is ignored for non-price fields', () => {
+		const intField = makeField( { key: 'stock_quantity', type: 'integer' } );
+		expect(
+			applyNumericOperation(
+				10,
+				{ type: 'increase', amount: 2.7 },
+				intField,
+				undefined,
+				'99'
+			)
+		).toBe( 12 );
+	} );
+
+	it( 'specialEnding uses explicit base when provided', () => {
+		expect(
+			applyNumericOperation(
+				'50.00',
+				{ type: 'increase', amount: 10 },
+				salePriceField,
+				100,
+				'99'
+			)
+		).toBe( '110.99' );
 	} );
 } );
 
