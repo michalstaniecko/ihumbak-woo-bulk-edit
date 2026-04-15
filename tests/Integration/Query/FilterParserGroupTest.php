@@ -162,6 +162,31 @@ final class FilterParserGroupTest extends WP_UnitTestCase
         self::assertNotContains($wrongPrice, $ids, 'Nested Item C (price 99) should not match');
     }
 
+    // ── Top-level FilterGroup (associative, not list-wrapped) ─────────────
+
+    public function test_apply_accepts_top_level_group_associative_array(): void
+    {
+        // Simulate the REST body shape: associative array (not list-wrapped).
+        // This is what PHP decodes when the client sends a bare FilterGroup object.
+        $filters = [
+            'type'        => 'group',
+            'combinator'  => 'AND',
+            'children'    => [
+                [
+                    'type'     => 'condition',
+                    'field'    => 'name',
+                    'operator' => 'LIKE',
+                    'value'    => 'Test',
+                ],
+            ],
+        ];
+
+        $builder = new QueryBuilder();
+        $result = $this->parser->apply($builder, $filters);
+
+        self::assertSame( true, $result, 'FilterParser must accept top-level associative group array' );
+    }
+
     // ── Error cases ───────────────────────────────────────────────────────
 
     public function test_apply_invalid_combinator_returns_wp_error(): void

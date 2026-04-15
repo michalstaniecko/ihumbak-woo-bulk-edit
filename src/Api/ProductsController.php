@@ -344,8 +344,23 @@ final class ProductsController extends RestController
     {
         return [
             'filters' => [
-                'type'    => 'array',
-                'default' => [],
+                'type'              => [ 'array', 'object' ],
+                'default'           => [],
+                'required'          => false,
+                'validate_callback' => static function ( $value ): true|\WP_Error {
+                    if ( is_array( $value ) ) {
+                        return true;
+                    }
+                    return new \WP_Error(
+                        'rest_invalid_param',
+                        __( 'filters must be an array of conditions or a filter group object.', 'ihumbak-woo-bulk-edit' ),
+                        [ 'status' => 400 ]
+                    );
+                },
+                'sanitize_callback' => static function ( array $value ): array {
+                    // Pass through unchanged; FilterParser normalizes both shapes.
+                    return $value;
+                },
             ],
             'sort' => [
                 'type'    => 'object',

@@ -110,6 +110,13 @@ final class FilterParser
      */
     private function normalizeInput(array $filters): array|WP_Error
     {
+        // Top-level FilterGroup object passed directly (associative array, not list).
+        // This happens when the REST body contains a bare group object instead of a
+        // list-wrapped group, e.g. {"type":"group","combinator":"AND","children":[…]}.
+        if ( isset( $filters['type'] ) && $filters['type'] === 'group' ) {
+            return $filters;
+        }
+
         // A single-element array whose only item is a group: unwrap it.
         if (count($filters) === 1 && isset($filters[0]['type']) && $filters[0]['type'] === 'group') {
             return $filters[0];
