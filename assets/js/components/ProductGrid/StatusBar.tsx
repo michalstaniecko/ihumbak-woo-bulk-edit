@@ -49,6 +49,8 @@ export function StatusBar( {
 	const hasChanges = changedProductsCount > 0;
 
 	const handleSave = (): void => {
+		// Pass products to help populate post_modified cache, but useBatchSave
+		// will also load missing post_modified values for products not on current page.
 		void save( products );
 	};
 

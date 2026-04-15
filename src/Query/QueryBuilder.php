@@ -101,6 +101,15 @@ final class QueryBuilder
     }
 
     /**
+     * Add a raw WHERE condition.
+     */
+    public function addCondition(string $conditionSql, array $values = []): self
+    {
+        $this->conditions[] = ['sql' => $conditionSql, 'values' => $values];
+        return $this;
+    }
+
+    /**
      * Convenience: join a meta key and add a WHERE condition in one call.
      */
     public function addMetaCondition(string $metaKey, string $conditionSql, array $values): string

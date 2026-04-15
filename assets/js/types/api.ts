@@ -225,6 +225,7 @@ export type Pagination = z.infer< typeof PaginationSchema >;
 // POST /products/query request body
 export const ProductsQueryParamsSchema = z.object( {
 	filters: z.union( [ z.array( ProductFilterSchema ), FilterGroupSchema ] ).default( [] ),
+	ids: z.array( z.number().int() ).default( [] ).optional(),
 	sort: SortSchema.default( { field: 'name', order: 'asc' } ),
 	page: z.number().min( 1 ).default( 1 ),
 	per_page: z.number().min( 10 ).max( 500 ).default( 50 ),

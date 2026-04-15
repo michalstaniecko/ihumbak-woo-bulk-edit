@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { __ } from '@wordpress/i18n';
 import { useQueryClient } from '@tanstack/react-query';
-import { batchSave } from '@/api/products';
+import { batchSave, fetchProducts } from '@/api/products';
 import { useChangesStore } from '@/store';
 import { useEditingStore } from '@/store';
 import type { BatchSaveItem, BatchSaveResult, VariationsResponse } from '@/types/api';
@@ -49,7 +49,7 @@ export function useBatchSave(): UseBatchSaveReturn {
 	const stopEditing = useEditingStore( ( state ) => state.stopEditing );
 
 	const save = useCallback(
-		async ( products: Product[] ) => {
+		async ( products: Product[] = [] ) => {
 			stopEditing();
 
 			// Build a post_modified lookup map — includes both parent products
@@ -70,6 +70,53 @@ export function useBatchSave(): UseBatchSaveReturn {
 				}
 			}
 
+			// Identify product IDs with changes that don't have post_modified yet.
+			const changedProductIds = Object.keys( changes ).map( Number );
+			const missingIds = changedProductIds.filter(
+				( id ) => ! productMap.has( id )
+			);
+
+			// Load missing post_modified values from the API.
+			if ( missingIds.length > 0 ) {
+				try {
+					const response = await fetchProducts(
+						{
+							ids: missingIds,
+							page: 1,
+							per_page: Math.max(
+								10,
+								Math.min( 500, missingIds.length )
+							),
+						},
+						abortRef.current?.signal
+					);
+					for ( const product of response.items ) {
+						productMap.set( product.id, product.post_modified );
+					}
+				} catch ( err ) {
+					// Log error for debugging. If fetch fails, we'll still attempt save
+					// but backend optimistic locking may reject products not on current page.
+					if (
+						err instanceof ReferenceError ||
+						err instanceof TypeError
+					) {
+						// Programmer error (missing import, etc) — log as error, not warning.
+						console.error(
+							'[useBatchSave] Critical error loading post_modified:',
+							err
+						);
+					} else {
+						// Network/server error — warn but proceed.
+						console.warn(
+							'[useBatchSave] Failed to load post_modified for',
+							missingIds.length,
+							'products. Proceeding with fallback.',
+							err
+						);
+					}
+				}
+			}
+
 			// Convert ChangeMap to flat BatchSaveItem array.
 			const items: BatchSaveItem[] = [];
 			for ( const [ productIdStr, fieldChanges ] of Object.entries(
@@ -77,9 +124,8 @@ export function useBatchSave(): UseBatchSaveReturn {
 			) ) {
 				const productId = Number( productIdStr );
 				const postModified = productMap.get( productId );
-				if ( ! postModified ) {
-					continue;
-				}
+				// Use empty string as fallback — backend will handle optimistic locking.
+				const safePostModified = postModified ?? '';
 
 				for ( const [ field, change ] of Object.entries(
 					fieldChanges
@@ -88,7 +134,7 @@ export function useBatchSave(): UseBatchSaveReturn {
 						id: productId,
 						field,
 						value: change.newValue,
-						post_modified: postModified,
+						post_modified: safePostModified,
 					} );
 				}
 			}

@@ -80,6 +80,7 @@ final class ProductsController extends RestController
     public function query(WP_REST_Request $request): WP_REST_Response|WP_Error
     {
         $filters  = $request->get_param('filters') ?? [];
+        $ids      = $request->get_param('ids') ?? [];
         $sort     = $request->get_param('sort') ?? ['field' => 'name', 'order' => 'asc'];
         $page     = max(1, (int) ($request->get_param('page') ?? 1));
         $perPage  = min(500, max(10, (int) ($request->get_param('per_page') ?? 50)));
@@ -87,10 +88,16 @@ final class ProductsController extends RestController
         $parser = new FilterParser($this->fieldRegistry);
         $builder = new QueryBuilder();
 
-        $parseResult = $parser->apply($builder, $filters);
+        // If specific IDs are requested, filter by them (ignoring other filters).
+        if (! empty($ids)) {
+            $placeholders = implode(',', array_fill(0, count($ids), '%d'));
+            $builder->addCondition("p.ID IN ($placeholders)", $ids);
+        } else {
+            $parseResult = $parser->apply($builder, $filters);
 
-        if ($parseResult instanceof WP_Error) {
-            return $parseResult;
+            if ($parseResult instanceof WP_Error) {
+                return $parseResult;
+            }
         }
 
         $sortField = $this->fieldRegistry->get($sort['field'] ?? 'name');
@@ -360,6 +367,14 @@ final class ProductsController extends RestController
                 'sanitize_callback' => static function ( array $value ): array {
                     // Pass through unchanged; FilterParser normalizes both shapes.
                     return $value;
+                },
+            ],
+            'ids' => [
+                'type'              => 'array',
+                'default'           => [],
+                'required'          => false,
+                'sanitize_callback' => static function ( $value ): array {
+                    return array_map( 'absint', (array) $value );
                 },
             ],
             'sort' => [
