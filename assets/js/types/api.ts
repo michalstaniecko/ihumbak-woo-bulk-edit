@@ -116,7 +116,7 @@ export const ProductSchema = z.object( {
 	// /products/query responses since Issue #15.
 	type: z.string(),
 	variations_count: z.number(),
-} );
+} ).passthrough(); // Allow custom taxonomy fields (dynamic field keys) to pass through.
 export type Product = z.infer< typeof ProductSchema >;
 
 // POST /products/query response

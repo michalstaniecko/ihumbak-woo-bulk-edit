@@ -515,7 +515,18 @@ final class QueryBuilder
             $metaMap[(int) $meta['post_id']][$meta['meta_key']] = $meta['meta_value'];
         }
 
-        // Fetch taxonomy terms (categories, tags, shipping class).
+        // Fetch taxonomy terms for all known taxonomies (built-in + custom).
+        // TaxonomyMap::all() returns the complete field_key → taxonomy_slug map,
+        // so we use all its slug values to build the IN clause dynamically.
+        $taxonomyMap = TaxonomyMap::all();
+        $allTaxonomySlugs = array_values($taxonomyMap);
+
+        if (empty($allTaxonomySlugs)) {
+            $allTaxonomySlugs = ['product_cat', 'product_tag', 'product_shipping_class'];
+        }
+
+        $taxonomyPlaceholders = implode(',', array_fill(0, count($allTaxonomySlugs), '%s'));
+
         $termRows = $wpdb->get_results(
             $wpdb->prepare(
                 "SELECT tr.object_id, tt.taxonomy, t.name, t.term_id
@@ -523,8 +534,8 @@ final class QueryBuilder
                  INNER JOIN {$wpdb->term_taxonomy} tt ON tr.term_taxonomy_id = tt.term_taxonomy_id
                  INNER JOIN {$wpdb->terms} t ON tt.term_id = t.term_id
                  WHERE tr.object_id IN ({$placeholders})
-                 AND tt.taxonomy IN ('product_cat', 'product_tag', 'product_shipping_class')",
-                ...$ids
+                 AND tt.taxonomy IN ({$taxonomyPlaceholders})",
+                ...array_merge($ids, $allTaxonomySlugs)
             ),
             ARRAY_A
         ) ?: [];
@@ -556,6 +567,16 @@ final class QueryBuilder
             $typeMap[(int) $typeRow['object_id']] = $typeRow['product_type'];
         }
 
+        // Build a map of custom taxonomy field keys (non-built-in) to their taxonomy slugs.
+        // Built-in taxonomies (categories, tags, shipping_class) are handled explicitly below.
+        $builtinFieldKeys = ['categories', 'tags', 'shipping_class'];
+        $customTaxonomyFields = [];
+        foreach ($taxonomyMap as $fieldKey => $taxonomySlug) {
+            if (!in_array($fieldKey, $builtinFieldKeys, true)) {
+                $customTaxonomyFields[$fieldKey] = $taxonomySlug;
+            }
+        }
+
         $products = [];
         foreach ($rows as $row) {
             $id = (int) $row['ID'];
@@ -574,49 +595,60 @@ final class QueryBuilder
                 ? array_map('intval', maybe_unserialize($meta['_upsell_ids']))
                 : [];
 
-            $products[] = [
-                'id'                 => $id,
-                'name'               => $row['name'],
-                'slug'               => $row['slug'],
-                'status'             => $row['status'],
-                'description'        => $row['description'] ?? '',
-                'short_description'  => $row['short_description'] ?? '',
-                'menu_order'         => (int) ($row['menu_order'] ?? 0),
-                'date_created'       => $row['date_created'] ?? '',
-                'reviews_allowed'    => ($row['reviews_allowed'] ?? 'open') === 'open',
-                'sku'                => $meta['_sku'] ?? '',
-                'regular_price'      => $meta['_regular_price'] ?? '',
-                'sale_price'         => $meta['_sale_price'] ?? '',
-                'manage_stock'       => ($meta['_manage_stock'] ?? 'no') === 'yes',
-                'stock_quantity'     => isset($meta['_stock']) ? (int) $meta['_stock'] : null,
-                'backorders'         => $meta['_backorders'] ?? 'no',
-                'sold_individually'  => ($meta['_sold_individually'] ?? 'no') === 'yes',
-                'weight'             => $meta['_weight'] ?? '',
-                'length'             => $meta['_length'] ?? '',
-                'width'              => $meta['_width'] ?? '',
-                'height'             => $meta['_height'] ?? '',
-                'virtual'            => ($meta['_virtual'] ?? 'no') === 'yes',
-                'downloadable'       => ($meta['_downloadable'] ?? 'no') === 'yes',
-                'download_limit'     => (int) ($meta['_download_limit'] ?? -1),
-                'download_expiry'    => (int) ($meta['_download_expiry'] ?? -1),
-                'purchase_note'      => $meta['_purchase_note'] ?? '',
-                'external_url'       => $meta['_product_url'] ?? '',
-                'button_text'        => $meta['_button_text'] ?? '',
-                'featured'           => ($meta['_featured'] ?? 'no') === 'yes',
-                'catalog_visibility' => $meta['_visibility'] ?? 'visible',
-                'thumbnail_id'       => isset($meta['_thumbnail_id']) ? (int) $meta['_thumbnail_id'] : null,
-                'gallery'            => $galleryIds,
-                'categories'         => $terms['product_cat'] ?? [],
-                'tags'               => $terms['product_tag'] ?? [],
-                'shipping_class'     => ! empty($terms['product_shipping_class'])
-                    ? $terms['product_shipping_class'][0]['name']
-                    : '',
-                'cross_sells'        => $crossSellIds,
-                'upsells'            => $upsellIds,
-                'post_modified'      => $row['post_modified'],
-                'type'               => $typeMap[$id] ?? 'simple',
-                'variations_count'   => $variationCounts[$id] ?? 0,
-            ];
+            // Build custom taxonomy term data keyed by field key.
+            $customTaxonomyData = [];
+            foreach ($customTaxonomyFields as $fieldKey => $taxonomySlug) {
+                $customTaxonomyData[$fieldKey] = $terms[$taxonomySlug] ?? [];
+            }
+
+            $products[] = array_merge(
+                [
+                    'id'                 => $id,
+                    'name'               => $row['name'],
+                    'slug'               => $row['slug'],
+                    'status'             => $row['status'],
+                    'description'        => $row['description'] ?? '',
+                    'short_description'  => $row['short_description'] ?? '',
+                    'menu_order'         => (int) ($row['menu_order'] ?? 0),
+                    'date_created'       => $row['date_created'] ?? '',
+                    'reviews_allowed'    => ($row['reviews_allowed'] ?? 'open') === 'open',
+                    'sku'                => $meta['_sku'] ?? '',
+                    'regular_price'      => $meta['_regular_price'] ?? '',
+                    'sale_price'         => $meta['_sale_price'] ?? '',
+                    'manage_stock'       => ($meta['_manage_stock'] ?? 'no') === 'yes',
+                    'stock_quantity'     => isset($meta['_stock']) ? (int) $meta['_stock'] : null,
+                    'backorders'         => $meta['_backorders'] ?? 'no',
+                    'sold_individually'  => ($meta['_sold_individually'] ?? 'no') === 'yes',
+                    'weight'             => $meta['_weight'] ?? '',
+                    'length'             => $meta['_length'] ?? '',
+                    'width'              => $meta['_width'] ?? '',
+                    'height'             => $meta['_height'] ?? '',
+                    'virtual'            => ($meta['_virtual'] ?? 'no') === 'yes',
+                    'downloadable'       => ($meta['_downloadable'] ?? 'no') === 'yes',
+                    'download_limit'     => (int) ($meta['_download_limit'] ?? -1),
+                    'download_expiry'    => (int) ($meta['_download_expiry'] ?? -1),
+                    'purchase_note'      => $meta['_purchase_note'] ?? '',
+                    'external_url'       => $meta['_product_url'] ?? '',
+                    'button_text'        => $meta['_button_text'] ?? '',
+                    'featured'           => ($meta['_featured'] ?? 'no') === 'yes',
+                    'catalog_visibility' => $meta['_visibility'] ?? 'visible',
+                    'thumbnail_id'       => isset($meta['_thumbnail_id']) ? (int) $meta['_thumbnail_id'] : null,
+                    'gallery'            => $galleryIds,
+                    'categories'         => $terms['product_cat'] ?? [],
+                    'tags'               => $terms['product_tag'] ?? [],
+                    'shipping_class'     => ! empty($terms['product_shipping_class'])
+                        ? $terms['product_shipping_class'][0]['name']
+                        : '',
+                    'cross_sells'        => $crossSellIds,
+                    'upsells'            => $upsellIds,
+                ],
+                $customTaxonomyData,
+                [
+                    'post_modified'    => $row['post_modified'],
+                    'type'             => $typeMap[$id] ?? 'simple',
+                    'variations_count' => $variationCounts[$id] ?? 0,
+                ]
+            );
         }
 
         return $products;
