@@ -1,23 +1,30 @@
 ---
 name: work-on-issue
-description: Start work on a GitHub issue — fetch issue details, then run analyze (Opus), code (Sonnet), test (Sonnet) agents sequentially.
-argument-hint: [issue-id]
+description: Start work on a GitHub issue (by ID) or a free-form task prompt — run analyze (Opus), code (Sonnet), test (Sonnet) agents sequentially.
+argument-hint: [issue-id | task description]
 disable-model-invocation: true
 ---
 
-# Work on GitHub Issue
+# Work on GitHub Issue or Task
 
-Orchestrate implementation of a GitHub issue using three specialized agents run sequentially.
+Orchestrate implementation of a GitHub issue or a free-form task using three specialized agents run sequentially.
 
 ## Input
 
-Issue ID: `$ARGUMENTS`
+Arguments: `$ARGUMENTS`
+
+### Determine input mode
+
+Check if `$ARGUMENTS` is a number (issue ID) or a text description (free-form task):
+
+- **Issue ID mode** — `$ARGUMENTS` is a positive integer (e.g. `42`): fetch issue details from GitHub.
+- **Free-form task mode** — `$ARGUMENTS` is any non-numeric text: treat it as the full task description; skip the GitHub fetch step.
 
 ## Workflow
 
-### Step 1: Fetch the issue
+### Step 1: Fetch the issue (Issue ID mode only)
 
-Run the following bash command to fetch full issue details:
+If input mode is **Issue ID**, run:
 
 ```bash
 gh issue view $ARGUMENTS --json number,title,body,labels,assignees,milestone,comments
@@ -27,6 +34,10 @@ Display a brief summary to the user:
 - Issue title and number
 - Labels
 - First 3 lines of the body
+
+If input mode is **Free-form task**, display:
+- "Task: $ARGUMENTS"
+- Skip to Step 2 immediately — use `$ARGUMENTS` as the issue content wherever the workflow refers to "full issue content".
 
 ### Step 2: Agent 1 — Analysis & Planning (Opus)
 
@@ -77,6 +88,7 @@ After all three agents complete, present a structured summary to the user:
 
 ```
 ## Issue #$ARGUMENTS — Implementation Complete
+(or "Task: $ARGUMENTS — Implementation Complete" for free-form mode)
 
 ### Plan (Agent 1)
 [Key points from the plan]
