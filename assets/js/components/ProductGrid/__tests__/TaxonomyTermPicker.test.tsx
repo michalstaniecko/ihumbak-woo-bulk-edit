@@ -46,11 +46,25 @@ function resetMockState(): void {
 	mockTermsState.data = undefined;
 }
 
+// Popover API stubs — stored so we can restore them after each test.
+let _origShowPopover: ( typeof HTMLElement.prototype )[ 'showPopover' ] | undefined;
+let _origHidePopover: ( typeof HTMLElement.prototype )[ 'hidePopover' ] | undefined;
+
 beforeEach( () => {
 	container = document.createElement( 'div' );
 	document.body.appendChild( container );
 	root = createRoot( container );
 	resetMockState();
+
+	// Mock Popover API — JSDOM does not implement it yet.
+	_origShowPopover = HTMLElement.prototype.showPopover;
+	_origHidePopover = HTMLElement.prototype.hidePopover;
+	HTMLElement.prototype.showPopover = vi.fn( function ( this: HTMLElement ) {
+		this.setAttribute( 'data-popover-open', 'true' );
+	} );
+	HTMLElement.prototype.hidePopover = vi.fn( function ( this: HTMLElement ) {
+		this.removeAttribute( 'data-popover-open' );
+	} );
 } );
 
 afterEach( () => {
@@ -58,6 +72,17 @@ afterEach( () => {
 		root.unmount();
 	} );
 	container.remove();
+	// Restore Popover API stubs so each test gets a fresh vi.fn().
+	if ( _origShowPopover !== undefined ) {
+		HTMLElement.prototype.showPopover = _origShowPopover;
+	} else {
+		delete ( HTMLElement.prototype as Partial< HTMLElement > ).showPopover;
+	}
+	if ( _origHidePopover !== undefined ) {
+		HTMLElement.prototype.hidePopover = _origHidePopover;
+	} else {
+		delete ( HTMLElement.prototype as Partial< HTMLElement > ).hidePopover;
+	}
 	vi.restoreAllMocks();
 } );
 
@@ -75,26 +100,34 @@ function getInput(): HTMLInputElement {
 	return input;
 }
 
+// The panel wrapper is a popover element — in real browsers it would be in the
+// top-layer (still accessible via document.querySelector). In JSDOM it stays in
+// the normal DOM tree as a child of the component root, so querying document
+// covers both cases.
+function getPanelWrapper(): HTMLElement | null {
+	return document.querySelector( '.iwbe-taxonomy-picker-panel-wrapper' );
+}
+
 function getDropdown(): HTMLElement | null {
-	return container.querySelector( '.iwbe-taxonomy-picker-dropdown' );
+	return document.querySelector( '.iwbe-taxonomy-picker-dropdown' );
 }
 
 function getItems(): NodeListOf< HTMLElement > {
-	return container.querySelectorAll< HTMLElement >(
+	return document.querySelectorAll< HTMLElement >(
 		'.iwbe-taxonomy-picker-item'
 	);
 }
 
 function getLoadingIndicator(): HTMLElement | null {
-	return container.querySelector( '.iwbe-taxonomy-picker-loading' );
+	return document.querySelector( '.iwbe-taxonomy-picker-loading' );
 }
 
 function getEmptyState(): HTMLElement | null {
-	return container.querySelector( '.iwbe-taxonomy-picker-empty' );
+	return document.querySelector( '.iwbe-taxonomy-picker-empty' );
 }
 
 function getErrorState(): HTMLElement | null {
-	return container.querySelector( '.iwbe-taxonomy-picker-error' );
+	return document.querySelector( '.iwbe-taxonomy-picker-error' );
 }
 
 describe( 'TaxonomyTermPicker', () => {
@@ -124,6 +157,44 @@ describe( 'TaxonomyTermPicker', () => {
 		const input = getInput();
 		expect( input ).not.toBeNull();
 		expect( input.type ).toBe( 'text' );
+	} );
+
+	// ── Popover API ───────────────────────────────────────────────────────────
+
+	it( 'invokes showPopover on the panel element on mount', () => {
+		render(
+			<TaxonomyTermPicker
+				fieldKey="categories"
+				onSelect={ vi.fn() }
+				onCancel={ vi.fn() }
+			/>
+		);
+
+		const panel = getPanelWrapper();
+		expect( panel ).not.toBeNull();
+		expect( panel?.getAttribute( 'data-popover-open' ) ).toBe( 'true' );
+	} );
+
+	it( 'calls onCancel when the popover emits a "closed" toggle event', () => {
+		const onCancel = vi.fn();
+		mockTermsState.data = { items: mockTerms, total: 3 };
+
+		render(
+			<TaxonomyTermPicker
+				fieldKey="categories"
+				onSelect={ vi.fn() }
+				onCancel={ onCancel }
+			/>
+		);
+
+		const panel = getPanelWrapper();
+		act( () => {
+			const evt = new Event( 'toggle' );
+			Object.defineProperty( evt, 'newState', { value: 'closed' } );
+			panel!.dispatchEvent( evt );
+		} );
+
+		expect( onCancel ).toHaveBeenCalledTimes( 1 );
 	} );
 
 	// ── Loading state ─────────────────────────────────────────────────────────
@@ -202,7 +273,7 @@ describe( 'TaxonomyTermPicker', () => {
 			/>
 		);
 
-		const text = container.textContent ?? '';
+		const text = document.body.textContent ?? '';
 		expect( text ).toContain( 'Shirts' );
 		expect( text ).toContain( 'Hats' );
 		expect( text ).toContain( 'Shoes' );
@@ -293,7 +364,7 @@ describe( 'TaxonomyTermPicker', () => {
 		} );
 
 		const items = getItems();
-		const activeItem = container.querySelector(
+		const activeItem = document.querySelector(
 			'.iwbe-taxonomy-picker-item--active'
 		);
 		expect( activeItem ).not.toBeNull();

@@ -1617,14 +1617,36 @@
 	outline: none;
 }
 
-.iwbe-taxonomy-picker-dropdown {
-	margin-top: 2px;
-	max-height: 200px;
-	overflow-y: auto;
+.iwbe-taxonomy-picker-input--selected {
+	background: #f0f6fc;
+	color: #1d2327;
+	cursor: pointer;
+}
+
+/* Popover API: top-layer panel — escapes overflow:hidden on modal ancestors.
+   Supported: Chrome 114+, Firefox 125+, Safari 17+ (all covered by WP admin).
+   JS positions this panel via position:fixed + getBoundingClientRect(). */
+.iwbe-taxonomy-picker-panel-wrapper[popover] {
+	/* Reset browser UA stylesheet defaults for [popover] elements */
+	position: fixed;
+	inset: unset;
+	margin: 0;
+	padding: 0;
+	overflow: visible;
+	/* Visual chrome */
 	border: 1px solid #c3c4c7;
 	border-radius: 3px;
 	background: #fff;
-	box-shadow: 0 2px 4px rgba( 0, 0, 0, 0.1 );
+	box-shadow: 0 2px 8px rgba( 0, 0, 0, 0.15 );
+}
+
+.iwbe-taxonomy-picker-panel-wrapper[popover]::backdrop {
+	background: transparent;
+}
+
+.iwbe-taxonomy-picker-dropdown {
+	max-height: 200px;
+	overflow-y: auto;
 }
 
 .iwbe-taxonomy-picker-item {
@@ -1662,10 +1684,17 @@
 	font-size: 13px;
 	color: #646970;
 	font-style: italic;
+	border-radius: 3px;
 }
 
 .iwbe-taxonomy-picker-error {
 	color: #d63638;
+}
+
+.iwbe-condition-taxonomy-picker {
+	flex: 1 1 200px;
+	min-width: 160px;
+	position: relative;
 }
 
 /* ── Column Visibility Menu (Issue #47) ────────────────────── */

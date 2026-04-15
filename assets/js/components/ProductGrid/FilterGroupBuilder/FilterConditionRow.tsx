@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { __ } from '@wordpress/i18n';
 import type { Field, FilterCondition, FilterOperator, TaxonomyTermDetail } from '@/types/api';
 import { TaxonomyTermPicker } from '../TaxonomyTermPicker';
@@ -85,6 +86,13 @@ export function FilterConditionRow( {
 	onUpdate,
 	onRemove,
 }: FilterConditionRowProps ): JSX.Element {
+	const [ selectedTermName, setSelectedTermName ] = useState( '' );
+
+	// Reset selected term name when the field changes (new field = no previous selection).
+	useEffect( () => {
+		setSelectedTermName( '' );
+	}, [ condition.field ] );
+
 	const filterableFields = fields.filter( ( f ) => f.filterable );
 	const selectedField = fields.find( ( f ) => f.key === condition.field ) ?? null;
 	const availableOperators = selectedField ? getOperatorsForField( selectedField ) : [];
@@ -142,6 +150,7 @@ export function FilterConditionRow( {
 	const handleTermSelect = ( term: TaxonomyTermDetail ) => {
 		// Store the term_id as a string — backend detects numeric value → term ID path.
 		onUpdate( path, { value: String( term.id ) } );
+		setSelectedTermName( term.name );
 	};
 
 	const isNumeric =
@@ -189,6 +198,7 @@ export function FilterConditionRow( {
 				<div className="iwbe-condition-taxonomy-picker">
 					<TaxonomyTermPicker
 						fieldKey={ condition.field }
+						selectedLabel={ selectedTermName }
 						onSelect={ handleTermSelect }
 						onCancel={ () => {} }
 					/>
