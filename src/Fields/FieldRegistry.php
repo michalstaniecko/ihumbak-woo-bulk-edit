@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace IhumbakWooBulkEdit\Fields;
 
+use IhumbakWooBulkEdit\Fields\Core\CustomTaxonomyField;
 use IhumbakWooBulkEdit\Fields\Core\BackordersField;
 use IhumbakWooBulkEdit\Fields\Core\ButtonTextField;
 use IhumbakWooBulkEdit\Fields\Core\CatalogVisibilityField;
@@ -108,6 +109,60 @@ final class FieldRegistry
                 $this->fields
             )
         );
+    }
+
+    /**
+     * Auto-discover custom taxonomies registered for the 'product' post type
+     * and register them as filterable taxonomy fields.
+     *
+     * Only taxonomies that are public or show_ui are exposed. Taxonomies already
+     * mapped in TaxonomyMap (built-in fields) are skipped.
+     *
+     * This method is a no-op when get_object_taxonomies() is not available
+     * (e.g. in unit-test environments without WordPress loaded).
+     *
+     * Must be called after the 'init' hook fires so that all taxonomies have
+     * been registered by WooCommerce and third-party plugins.
+     */
+    public function discoverCustomTaxonomies(): void
+    {
+        if (!function_exists('get_object_taxonomies')) {
+            return;
+        }
+
+        /** @var array<string, \WP_Taxonomy> $taxonomies */
+        $taxonomies = get_object_taxonomies('product', 'objects');
+
+        foreach ($taxonomies as $taxonomy) {
+            // Skip if already covered by a built-in field mapping.
+            if (TaxonomyMap::fieldForTaxonomy($taxonomy->name) !== null) {
+                continue;
+            }
+
+            // Skip non-public, non-show_ui taxonomies (internal WP taxonomies
+            // such as product_type and product_visibility).
+            if (!$taxonomy->public && !$taxonomy->show_ui) {
+                continue;
+            }
+
+            // Use the taxonomy slug as field key.
+            $fieldKey = $taxonomy->name;
+
+            // Skip if a field with this key is already registered (prevents
+            // clobbering any core field that shares a slug name).
+            if (isset($this->fields[$fieldKey])) {
+                continue;
+            }
+
+            // Derive human-readable label; fall back to the slug.
+            $label = $taxonomy->labels->name ?? $taxonomy->label ?? $taxonomy->name;
+            if (empty($label)) {
+                $label = $taxonomy->name;
+            }
+
+            TaxonomyMap::register($fieldKey, $taxonomy->name);
+            $this->register(new CustomTaxonomyField($fieldKey, $label, $taxonomy->name));
+        }
     }
 
     private function registerCoreFields(): void

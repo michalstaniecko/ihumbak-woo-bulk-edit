@@ -301,6 +301,13 @@ final class Plugin
             $userPreferences->register_routes();
         });
 
+        // Discover custom product taxonomies after all plugins have registered their taxonomies.
+        add_action('init', function (): void {
+            /** @var FieldRegistry $fieldRegistry */
+            $fieldRegistry = $this->container->get(FieldRegistry::class);
+            $fieldRegistry->discoverCustomTaxonomies();
+        }, 20);
+
         // Ensure schema is up-to-date on upgrade (no-op if versions match).
         /** @var DatabaseMigrator $migrator */
         $migrator = $this->container->get(DatabaseMigrator::class);

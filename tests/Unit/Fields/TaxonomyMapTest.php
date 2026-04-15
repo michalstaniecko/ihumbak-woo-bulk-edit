@@ -14,6 +14,16 @@ use PHPUnit\Framework\TestCase;
  */
 final class TaxonomyMapTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        TaxonomyMap::resetRuntimeEntries();
+    }
+
+    protected function tearDown(): void
+    {
+        TaxonomyMap::resetRuntimeEntries();
+    }
+
     public function test_fieldKeys_returns_all_three_keys(): void
     {
         $keys = TaxonomyMap::fieldKeys();
@@ -126,5 +136,55 @@ final class TaxonomyMapTest extends TestCase
             self::assertNotNull($taxonomy, "taxonomyForField({$fieldKey}) should not be null");
             self::assertSame($fieldKey, TaxonomyMap::fieldForTaxonomy($taxonomy));
         }
+    }
+
+    // ── Runtime registration tests ────────────────────────────────────────
+
+    public function test_register_adds_runtime_entry(): void
+    {
+        TaxonomyMap::register('product_brand', 'pwb-brand');
+
+        self::assertSame('pwb-brand', TaxonomyMap::taxonomyForField('product_brand'));
+        self::assertSame('product_brand', TaxonomyMap::fieldForTaxonomy('pwb-brand'));
+        self::assertTrue(TaxonomyMap::isTaxonomyField('product_brand'));
+        self::assertContains('product_brand', TaxonomyMap::fieldKeys());
+    }
+
+    public function test_register_does_not_overwrite_builtin(): void
+    {
+        // Attempt to re-register 'categories' with a different slug.
+        TaxonomyMap::register('categories', 'some_other_tax');
+
+        // Built-in mapping must remain unchanged.
+        self::assertSame('product_cat', TaxonomyMap::taxonomyForField('categories'));
+    }
+
+    public function test_isTaxonomyField_returns_true_for_runtime_entry(): void
+    {
+        TaxonomyMap::register('custom_tax', 'my_custom_taxonomy');
+
+        self::assertTrue(TaxonomyMap::isTaxonomyField('custom_tax'));
+    }
+
+    public function test_fieldForTaxonomy_works_for_runtime_entry(): void
+    {
+        TaxonomyMap::register('custom_tax', 'my_custom_taxonomy');
+
+        self::assertSame('custom_tax', TaxonomyMap::fieldForTaxonomy('my_custom_taxonomy'));
+    }
+
+    public function test_resetRuntimeEntries_restores_builtin_only(): void
+    {
+        TaxonomyMap::register('custom_tax', 'my_custom_taxonomy');
+        self::assertContains('custom_tax', TaxonomyMap::fieldKeys());
+
+        TaxonomyMap::resetRuntimeEntries();
+
+        self::assertNotContains('custom_tax', TaxonomyMap::fieldKeys());
+        self::assertCount(3, TaxonomyMap::fieldKeys());
+        // Built-ins are still intact.
+        self::assertSame('product_cat', TaxonomyMap::taxonomyForField('categories'));
+        self::assertSame('product_tag', TaxonomyMap::taxonomyForField('tags'));
+        self::assertSame('product_shipping_class', TaxonomyMap::taxonomyForField('shipping_class'));
     }
 }

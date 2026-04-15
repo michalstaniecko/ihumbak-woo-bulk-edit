@@ -10,22 +10,61 @@ namespace IhumbakWooBulkEdit\Fields;
  * This is the single source of truth for all taxonomy field → WP slug
  * conversions, shared by QueryBuilder, FilterParser, and TaxonomyTermsController.
  *
+ * Runtime entries (custom taxonomies discovered via discoverCustomTaxonomies())
+ * are stored in the mutable static $map. Built-in entries are preserved in
+ * BUILTIN and are never overwritten by register().
+ *
  * @license GPL-2.0-or-later
  */
 final class TaxonomyMap
 {
     /**
-     * Map of field_key → WordPress taxonomy slug.
-     *
-     * TODO: integration point for custom taxonomies (Brands, etc.) — see Integrations roadmap.
+     * Built-in field_key → WordPress taxonomy slug entries.
+     * These entries cannot be overwritten via register().
      *
      * @var array<string, string>
      */
-    private const MAP = [
+    private const BUILTIN = [
         'categories'     => 'product_cat',
         'tags'           => 'product_tag',
         'shipping_class' => 'product_shipping_class',
     ];
+
+    /**
+     * Runtime map of field_key → WordPress taxonomy slug.
+     * Initialized from BUILTIN; extended at runtime by register().
+     *
+     * @var array<string, string>
+     */
+    private static array $map = self::BUILTIN;
+
+    /**
+     * Register a custom taxonomy field mapping at runtime.
+     *
+     * Silently skips the registration if $fieldKey is already a built-in key,
+     * preventing accidental overwrite of core taxonomy mappings.
+     *
+     * @param string $fieldKey    The field key used in the filter/API (e.g. "product_brand").
+     * @param string $taxonomySlug The WP taxonomy slug (e.g. "pwb-brand").
+     */
+    public static function register(string $fieldKey, string $taxonomySlug): void
+    {
+        if (isset(self::BUILTIN[$fieldKey])) {
+            return;
+        }
+
+        self::$map[$fieldKey] = $taxonomySlug;
+    }
+
+    /**
+     * Reset runtime entries back to built-in only.
+     *
+     * Intended for use in test setUp/tearDown to ensure test isolation.
+     */
+    public static function resetRuntimeEntries(): void
+    {
+        self::$map = self::BUILTIN;
+    }
 
     /**
      * Return all field keys that correspond to a WordPress taxonomy.
@@ -34,7 +73,7 @@ final class TaxonomyMap
      */
     public static function fieldKeys(): array
     {
-        return array_keys(self::MAP);
+        return array_keys(self::$map);
     }
 
     /**
@@ -45,7 +84,7 @@ final class TaxonomyMap
      */
     public static function taxonomyForField(string $fieldKey): ?string
     {
-        return self::MAP[$fieldKey] ?? null;
+        return self::$map[$fieldKey] ?? null;
     }
 
     /**
@@ -56,7 +95,7 @@ final class TaxonomyMap
      */
     public static function fieldForTaxonomy(string $taxonomy): ?string
     {
-        $flipped = array_flip(self::MAP);
+        $flipped = array_flip(self::$map);
         return $flipped[$taxonomy] ?? null;
     }
 
@@ -67,7 +106,7 @@ final class TaxonomyMap
      */
     public static function isTaxonomyField(string $fieldKey): bool
     {
-        return isset(self::MAP[$fieldKey]);
+        return isset(self::$map[$fieldKey]);
     }
 
     /**
@@ -77,6 +116,6 @@ final class TaxonomyMap
      */
     public static function all(): array
     {
-        return self::MAP;
+        return self::$map;
     }
 }

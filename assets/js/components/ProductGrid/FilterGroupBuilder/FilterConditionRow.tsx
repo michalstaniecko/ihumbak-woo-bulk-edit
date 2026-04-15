@@ -1,5 +1,6 @@
 import { __ } from '@wordpress/i18n';
-import type { Field, FilterCondition, FilterOperator } from '@/types/api';
+import type { Field, FilterCondition, FilterOperator, TaxonomyTermDetail } from '@/types/api';
+import { TaxonomyTermPicker } from '../TaxonomyTermPicker';
 
 // ── Operator metadata ─────────────────────────────────────────────────────────
 
@@ -47,6 +48,12 @@ const OPERATOR_META: Record< FilterOperator, OperatorMeta > = {
 	},
 	REGEXP: { label: __( 'matches pattern', 'ihumbak-woo-bulk-edit' ), valueMode: 'single' },
 };
+
+/**
+ * Operators that use the TaxonomyTermPicker for taxonomy fields
+ * (ID-based selection, matching the FilterToolbar behaviour).
+ */
+const TAXONOMY_ID_OPERATORS: FilterOperator[] = [ '=', '!=' ];
 
 /**
  * Returns the list of operators applicable to a given field type.
@@ -105,7 +112,18 @@ export function FilterConditionRow( {
 	};
 
 	const handleOperatorChange = ( e: React.ChangeEvent< HTMLSelectElement > ) => {
-		onUpdate( path, { operator: e.target.value as FilterOperator } );
+		const newOperator = e.target.value as FilterOperator;
+		const newMeta = OPERATOR_META[ newOperator ] ?? { valueMode: 'single' };
+		const oldMeta = OPERATOR_META[ condition.operator ] ?? { valueMode: 'single' };
+
+		// Reset the value when switching between incompatible value modes to
+		// prevent stale array values (from BETWEEN) from being sent for single
+		// operators like = — which would cause zero results on the backend.
+		if ( newMeta.valueMode !== oldMeta.valueMode ) {
+			onUpdate( path, { operator: newOperator, value: '' } );
+		} else {
+			onUpdate( path, { operator: newOperator } );
+		}
 	};
 
 	const handleSingleValueChange = ( e: React.ChangeEvent< HTMLInputElement | HTMLTextAreaElement > ) => {
@@ -120,10 +138,19 @@ export function FilterConditionRow( {
 		onUpdate( path, { value: [ rangeValues[ 0 ], e.target.value ] } );
 	};
 
+	// Called when TaxonomyTermPicker selects a term.
+	const handleTermSelect = ( term: TaxonomyTermDetail ) => {
+		// Store the term_id as a string — backend detects numeric value → term ID path.
+		onUpdate( path, { value: String( term.id ) } );
+	};
+
 	const isNumeric =
 		selectedField?.type === 'number' ||
 		selectedField?.type === 'price' ||
 		selectedField?.type === 'integer';
+
+	const isTaxonomy = selectedField?.type === 'taxonomy';
+	const isTaxonomyIdOp = TAXONOMY_ID_OPERATORS.includes( condition.operator );
 
 	return (
 		<div className="iwbe-filter-condition-row">
@@ -155,7 +182,26 @@ export function FilterConditionRow( {
 				) ) }
 			</select>
 
-			{ /* Value input — branches on operator's valueMode */ }
+			{ /* Value input — branches on operator's valueMode and field type */ }
+
+			{ /* Taxonomy fields with = / != use TaxonomyTermPicker (ID-based, like FilterToolbar) */ }
+			{ operatorMeta.valueMode !== 'none' && isTaxonomy && isTaxonomyIdOp && (
+				<div className="iwbe-condition-taxonomy-picker">
+					<TaxonomyTermPicker
+						fieldKey={ condition.field }
+						onSelect={ handleTermSelect }
+						onCancel={ () => {} }
+					/>
+					{ /* Show the currently selected term ID (if any) so the user knows a term is set */ }
+					{ singleValue !== '' && (
+						<span className="iwbe-condition-term-id-badge">
+							{ __( 'Term ID:', 'ihumbak-woo-bulk-edit' ) }{ ' ' }
+							{ singleValue }
+						</span>
+					) }
+				</div>
+			) }
+
 			{ operatorMeta.valueMode === 'multi' && (
 				<textarea
 					className="iwbe-tag-input"
@@ -189,7 +235,8 @@ export function FilterConditionRow( {
 				</span>
 			) }
 
-			{ operatorMeta.valueMode === 'single' && (
+			{ /* Plain text/number input for non-taxonomy single-value conditions */ }
+			{ operatorMeta.valueMode === 'single' && ! ( isTaxonomy && isTaxonomyIdOp ) && (
 				<input
 					type={ isNumeric ? 'number' : 'text' }
 					className="iwbe-condition-value-input"

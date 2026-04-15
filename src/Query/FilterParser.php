@@ -400,6 +400,31 @@ final class FilterParser
             return $builder->buildTaxonomyTermIdSql($taxonomy, $expanded, $negate);
         }
 
+        // Array value with = or != (e.g. leftover BETWEEN value after operator switch):
+        // treat as a set of term names and route through the IN operator to avoid
+        // PHP's silent array-to-string cast that would produce WHERE t.name = 'Array'.
+        if (is_array($value) && in_array($operatorId, ['=', '!='], true)) {
+            $names = array_values(
+                array_filter(
+                    array_map(static fn (mixed $v): string => trim((string) $v), $value),
+                    static fn (string $s): bool => $s !== '',
+                )
+            );
+
+            if (empty($names)) {
+                // All elements were empty — produce a no-match tautology.
+                return ['sql' => '1=0', 'values' => []];
+            }
+
+            $inOperator = $this->operators->get('IN');
+            if ($inOperator === null) {
+                return ['sql' => '1=0', 'values' => []];
+            }
+
+            $result = $inOperator->toSql('t.name', $names);
+            return $builder->buildTaxonomySubquerySql($taxonomy, $result['sql'], $result['values'], $negate);
+        }
+
         // Name-based path.
         $result = $positiveOperator->toSql('t.name', $value);
         return $builder->buildTaxonomySubquerySql($taxonomy, $result['sql'], $result['values'], $negate);

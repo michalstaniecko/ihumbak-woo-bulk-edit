@@ -178,6 +178,35 @@ final class FieldRegistryTest extends TestCase
         );
     }
 
+    // ── discoverCustomTaxonomies tests ────────────────────────────────────
+
+    public function test_discoverCustomTaxonomies_method_exists_and_returns_void(): void
+    {
+        self::assertTrue(method_exists($this->registry, 'discoverCustomTaxonomies'));
+
+        // Calling it without get_object_taxonomies present (unit test context)
+        // must not throw — the function_exists guard handles this gracefully.
+        $result = $this->registry->discoverCustomTaxonomies();
+
+        self::assertNull($result);
+    }
+
+    public function test_discoverCustomTaxonomies_is_noop_when_get_object_taxonomies_missing(): void
+    {
+        // In a pure unit-test environment, get_object_taxonomies() is not available.
+        // discoverCustomTaxonomies() must check function_exists() and return void
+        // without error.
+        if (function_exists('get_object_taxonomies')) {
+            self::markTestSkipped('get_object_taxonomies() exists in this environment; noop guard cannot be tested here.');
+        }
+
+        $countBefore = count($this->registry->getAll());
+
+        $this->registry->discoverCustomTaxonomies();
+
+        self::assertCount($countBefore, $this->registry->getAll());
+    }
+
     private function createMockField(string $key): FieldInterface
     {
         $mock = $this->createMock(FieldInterface::class);
