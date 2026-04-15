@@ -497,4 +497,89 @@ describe( 'TaxonomyTermPicker', () => {
 
 		expect( getDropdown() ).not.toBeNull();
 	} );
+
+	// ── selectedTermId prop — collapsed initial state ─────────────────────────
+
+	it( 'does NOT call showPopover when selectedTermId is provided on mount', () => {
+		render(
+			<TaxonomyTermPicker
+				fieldKey="categories"
+				selectedTermId="42"
+				onSelect={ vi.fn() }
+				onCancel={ vi.fn() }
+			/>
+		);
+
+		const panel = getPanelWrapper();
+		expect( panel?.getAttribute( 'data-popover-open' ) ).toBeNull();
+	} );
+
+	it( 'does NOT call showPopover when selectedLabel is provided on mount', () => {
+		render(
+			<TaxonomyTermPicker
+				fieldKey="categories"
+				selectedLabel="Shirts"
+				onSelect={ vi.fn() }
+				onCancel={ vi.fn() }
+			/>
+		);
+
+		const panel = getPanelWrapper();
+		expect( panel?.getAttribute( 'data-popover-open' ) ).toBeNull();
+	} );
+
+	it( 'shows selectedLabel in the input when collapsed via selectedTermId', () => {
+		render(
+			<TaxonomyTermPicker
+				fieldKey="categories"
+				selectedTermId="42"
+				selectedLabel="Shirts"
+				onSelect={ vi.fn() }
+				onCancel={ vi.fn() }
+			/>
+		);
+
+		const input = getInput();
+		expect( input.value ).toBe( 'Shirts' );
+	} );
+
+	it( 'shows "#ID" fallback in input when selectedTermId is set but selectedLabel is empty', () => {
+		render(
+			<TaxonomyTermPicker
+				fieldKey="categories"
+				selectedTermId="42"
+				onSelect={ vi.fn() }
+				onCancel={ vi.fn() }
+			/>
+		);
+
+		const input = getInput();
+		expect( input.value ).toBe( '#42' );
+	} );
+
+	it( 'collapses panel when selectedTermId changes from empty to a value', () => {
+		render(
+			<TaxonomyTermPicker
+				fieldKey="categories"
+				selectedTermId=""
+				onSelect={ vi.fn() }
+				onCancel={ vi.fn() }
+			/>
+		);
+
+		// Panel open initially (no selection).
+		expect( getPanelWrapper()?.getAttribute( 'data-popover-open' ) ).toBe( 'true' );
+
+		// Re-render with a term ID set.
+		render(
+			<TaxonomyTermPicker
+				fieldKey="categories"
+				selectedTermId="7"
+				onSelect={ vi.fn() }
+				onCancel={ vi.fn() }
+			/>
+		);
+
+		expect( getPanelWrapper()?.getAttribute( 'data-popover-open' ) ).toBeNull();
+	} );
 } );

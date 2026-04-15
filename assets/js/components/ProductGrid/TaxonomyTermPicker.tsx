@@ -5,7 +5,9 @@ import type { TaxonomyTermDetail } from '@/types/api';
 
 interface TaxonomyTermPickerProps {
 	fieldKey: string;
-	/** Name of the currently selected term; when set the panel starts closed and the input shows this label. */
+	/** Numeric term ID from condition.value; when set the panel starts collapsed. */
+	selectedTermId?: string;
+	/** Name of the currently selected term; displayed in the input when collapsed. */
 	selectedLabel?: string;
 	onSelect: ( term: TaxonomyTermDetail ) => void;
 	onCancel: () => void;
@@ -20,9 +22,12 @@ interface TaxonomyTermPickerProps {
  * - Uses onMouseDown (not onClick) for item selection to beat outside-click handlers
  * - Panel rendered via the native HTML Popover API so it escapes all
  *   overflow:hidden / overflow:auto ancestor clipping (top-layer).
+ * - Outside-click uses pointerdown capture phase so it fires before any
+ *   element handler and works regardless of top-layer rendering.
  */
 export function TaxonomyTermPicker( {
 	fieldKey,
+	selectedTermId = '',
 	selectedLabel = '',
 	onSelect,
 	onCancel,
@@ -31,10 +36,12 @@ export function TaxonomyTermPicker( {
 	const [ debouncedSearch, setDebouncedSearch ] = useState( '' );
 	const [ activeIndex, setActiveIndex ] = useState( -1 );
 	// Panel starts closed when a term is already selected (e.g. editing a saved filter).
-	const [ isOpen, setIsOpen ] = useState( ! selectedLabel );
+	const hasSelection = !! selectedTermId || !! selectedLabel;
+	const [ isOpen, setIsOpen ] = useState( ! hasSelection );
 
 	const inputRef = useRef< HTMLInputElement >( null );
 	const debounceRef = useRef< ReturnType< typeof setTimeout > | null >( null );
+	const blurTimerRef = useRef< ReturnType< typeof setTimeout > | null >( null );
 	const anchorRef = useRef< HTMLDivElement >( null );
 	const panelRef = useRef< HTMLDivElement >( null );
 
@@ -55,18 +62,28 @@ export function TaxonomyTermPicker( {
 		[]
 	);
 
-	// Cleanup debounce timer on unmount.
+	// Cleanup timers on unmount.
 	useEffect( () => {
 		return () => {
-			if ( debounceRef.current ) {
-				clearTimeout( debounceRef.current );
-			}
+			if ( debounceRef.current ) clearTimeout( debounceRef.current );
+			if ( blurTimerRef.current ) clearTimeout( blurTimerRef.current );
 		};
 	}, [] );
 
-	// Autofocus the input on mount.
+	// Re-collapse when the parent replaces the selection (e.g. term selected via click).
 	useEffect( () => {
-		inputRef.current?.focus();
+		if ( selectedTermId ) setIsOpen( false );
+	}, [ selectedTermId ] );
+
+	// Autofocus the input on mount only when the panel starts open (no pre-existing selection).
+	// Skipping autofocus when collapsed prevents handleInputFocus from immediately reopening
+	// the picker on remount (e.g. when the Filter Builder modal is reopened with a saved filter).
+	useEffect( () => {
+		if ( isOpen ) {
+			inputRef.current?.focus();
+		}
+		// isOpen intentionally omitted: we only want the initial mount value.
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [] );
 
 	const { isLoading, isError, data } = useTaxonomyTerms(
@@ -150,6 +167,39 @@ export function TaxonomyTermPicker( {
 		return () => panel.removeEventListener( 'toggle', onToggle );
 	}, [ onCancel ] );
 
+	// Close when clicking outside the picker.
+	//
+	// Uses pointerdown in CAPTURE PHASE so it fires before any element handler
+	// and cannot be blocked by stopPropagation() in child elements. This is more
+	// reliable than bubble-phase mousedown or onBlur when the panel is in the
+	// browser top layer (popover="manual").
+	//
+	// anchorRef wraps the entire picker <div> which contains BOTH the input
+	// and the panel <div> in the DOM tree (the popover API only promotes the
+	// panel visually — DOM structure is unchanged). So contains() returns true
+	// for clicks on the input AND for clicks on list items, preventing both
+	// from accidentally closing the picker.
+	useEffect( () => {
+		if ( ! isOpen ) return;
+
+		const handlePointerDown = ( e: PointerEvent ) => {
+			const target = e.target as Node;
+			if ( anchorRef.current && ! anchorRef.current.contains( target ) ) {
+				// Call hidePopover() synchronously for immediate visual effect —
+				// avoids the async React state → effect → hidePopover() chain.
+				try {
+					panelRef.current?.hidePopover();
+				} catch {
+					// already closed — ignore
+				}
+				setIsOpen( false );
+			}
+		};
+
+		document.addEventListener( 'pointerdown', handlePointerDown, true );
+		return () => document.removeEventListener( 'pointerdown', handlePointerDown, true );
+	}, [ isOpen ] );
+
 	// Close the panel and propagate selection upward.
 	const handleSelect = useCallback(
 		( term: TaxonomyTermDetail ) => {
@@ -159,9 +209,24 @@ export function TaxonomyTermPicker( {
 		[ onSelect ]
 	);
 
+	// Fallback close for keyboard Tab navigation (no pointerdown involved).
+	// Delay 150ms so onMouseDown on list items fires first — items call
+	// e.preventDefault() which keeps the input focused, cancelling this timer.
+	const handleInputBlur = useCallback( () => {
+		blurTimerRef.current = setTimeout( () => {
+			setIsOpen( false );
+		}, 150 );
+	}, [] );
+
 	// When the input is focused while the panel is closed (a term is already
 	// selected), reopen the panel so the user can change their selection.
+	// Also cancel a pending blur-close so that blur → immediate refocus keeps
+	// the panel open.
 	const handleInputFocus = useCallback( () => {
+		if ( blurTimerRef.current ) {
+			clearTimeout( blurTimerRef.current );
+			blurTimerRef.current = null;
+		}
 		if ( ! isOpen ) {
 			setSearch( '' );
 			setDebouncedSearch( '' );
@@ -270,18 +335,21 @@ export function TaxonomyTermPicker( {
 			<input
 				ref={ inputRef }
 				type="text"
-				className={ 'iwbe-taxonomy-picker-input' + ( ! isOpen && selectedLabel ? ' iwbe-taxonomy-picker-input--selected' : '' ) }
+				className={ 'iwbe-taxonomy-picker-input' + ( ! isOpen && hasSelection ? ' iwbe-taxonomy-picker-input--selected' : '' ) }
 				placeholder={ __( 'Search terms…', 'ihumbak-woo-bulk-edit' ) }
-				value={ ! isOpen && selectedLabel ? selectedLabel : search }
+				value={ ! isOpen && hasSelection
+					? ( selectedLabel || `#${ selectedTermId }` )
+					: search }
 				onChange={ handleSearchChange }
 				onKeyDown={ handleKeyDown }
 				onFocus={ handleInputFocus }
+				onBlur={ handleInputBlur }
 				aria-label={ __( 'Search taxonomy terms', 'ihumbak-woo-bulk-edit' ) }
 				autoComplete="off"
-				readOnly={ ! isOpen && !! selectedLabel }
+				readOnly={ ! isOpen && hasSelection }
 			/>
 			{ /* Panel is rendered in the browser top-layer via the Popover API,
-			     escaping overflow:hidden / overflow:auto on all ancestors.
+			     escaping overflow:hidden / overflow:auto on all ancestor clipping.
 			     Supported: Chrome 114+, Firefox 125+, Safari 17+. */ }
 			<div
 				ref={ panelRef }

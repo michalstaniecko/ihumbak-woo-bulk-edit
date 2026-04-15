@@ -14,6 +14,28 @@ vi.mock( '@wordpress/i18n', () => ( {
 } ) );
 
 // ---------------------------------------------------------------------------
+// Mock useTaxonomyTerms so TaxonomyTermPicker renders without real queries.
+// ---------------------------------------------------------------------------
+
+type MockTermsState = {
+	isLoading: boolean;
+	isError: boolean;
+	data: { items: Array< { id: number; name: string; slug: string; count: number; parent: number } >; total: number } | undefined;
+};
+
+const mockTermsState: MockTermsState = { isLoading: false, isError: false, data: undefined };
+const mockLabelMap: Record< string, string > = {};
+
+vi.mock( '@/hooks/useTaxonomyTerms', () => ( {
+	useTaxonomyTerms: () => mockTermsState,
+	useTaxonomyTermLabels: () => mockLabelMap,
+} ) );
+
+// Stub Popover API for JSDOM.
+let _origShowPopover: ( typeof HTMLElement.prototype )[ 'showPopover' ] | undefined;
+let _origHidePopover: ( typeof HTMLElement.prototype )[ 'hidePopover' ] | undefined;
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -45,6 +67,15 @@ const FIELDS: Field[] = [
 		filterable: true,
 		options: { publish: 'Published', draft: 'Draft' },
 	},
+	{
+		key: 'categories',
+		label: 'Categories',
+		type: 'taxonomy',
+		editable: true,
+		sortable: false,
+		filterable: true,
+		options: {},
+	},
 ];
 
 let container: HTMLDivElement;
@@ -53,6 +84,19 @@ let root: Root;
 beforeEach( () => {
 	container = document.createElement( 'div' );
 	document.body.appendChild( container );
+
+	_origShowPopover = HTMLElement.prototype.showPopover;
+	_origHidePopover = HTMLElement.prototype.hidePopover;
+	HTMLElement.prototype.showPopover = vi.fn( function ( this: HTMLElement ) {
+		this.setAttribute( 'data-popover-open', 'true' );
+	} );
+	HTMLElement.prototype.hidePopover = vi.fn( function ( this: HTMLElement ) {
+		this.removeAttribute( 'data-popover-open' );
+	} );
+
+	mockTermsState.isLoading = false;
+	mockTermsState.isError = false;
+	mockTermsState.data = undefined;
 } );
 
 afterEach( () => {
@@ -60,6 +104,18 @@ afterEach( () => {
 		root?.unmount();
 	} );
 	container.remove();
+
+	if ( _origShowPopover !== undefined ) {
+		HTMLElement.prototype.showPopover = _origShowPopover;
+	} else {
+		delete ( HTMLElement.prototype as Partial< HTMLElement > ).showPopover;
+	}
+	if ( _origHidePopover !== undefined ) {
+		HTMLElement.prototype.hidePopover = _origHidePopover;
+	} else {
+		delete ( HTMLElement.prototype as Partial< HTMLElement > ).hidePopover;
+	}
+	vi.restoreAllMocks();
 } );
 
 // ---------------------------------------------------------------------------
@@ -270,5 +326,77 @@ describe( 'FilterConditionRow', () => {
 		} );
 
 		expect( onRemove ).toHaveBeenCalledWith( '0' );
+	} );
+
+	// ── Taxonomy field — reopening modal (bug fix) ────────────────────────────
+
+	it( 'renders TaxonomyTermPicker for taxonomy field with = operator', async () => {
+		await renderConditionRow( {
+			type: 'condition',
+			field: 'categories',
+			operator: '=',
+			value: '42',
+		} );
+
+		const picker = container.querySelector( '.iwbe-taxonomy-picker' );
+		expect( picker ).not.toBeNull();
+	} );
+
+	it( 'does NOT open the popover when condition already has a numeric term ID (modal reopen)', async () => {
+		await renderConditionRow( {
+			type: 'condition',
+			field: 'categories',
+			operator: '=',
+			value: '42',
+		} );
+
+		const panel = container.querySelector( '.iwbe-taxonomy-picker-panel-wrapper' );
+		expect( panel ).not.toBeNull();
+		// Panel must NOT be open — the popover API mock sets data-popover-open when showPopover is called.
+		expect( panel?.getAttribute( 'data-popover-open' ) ).toBeNull();
+	} );
+
+	it( 'shows resolved term label in picker input when labelMap provides a name', async () => {
+		// Simulate the label map returning a name for this term ID.
+		mockLabelMap[ 'categories:42' ] = 'Shirts';
+
+		await renderConditionRow( {
+			type: 'condition',
+			field: 'categories',
+			operator: '=',
+			value: '42',
+		} );
+
+		const input = container.querySelector< HTMLInputElement >( '.iwbe-taxonomy-picker-input' );
+		expect( input ).not.toBeNull();
+		expect( input?.value ).toBe( 'Shirts' );
+
+		// Cleanup label map.
+		delete mockLabelMap[ 'categories:42' ];
+	} );
+
+	it( 'shows "#ID" fallback in picker input when labelMap has no entry', async () => {
+		await renderConditionRow( {
+			type: 'condition',
+			field: 'categories',
+			operator: '=',
+			value: '99',
+		} );
+
+		const input = container.querySelector< HTMLInputElement >( '.iwbe-taxonomy-picker-input' );
+		expect( input ).not.toBeNull();
+		expect( input?.value ).toBe( '#99' );
+	} );
+
+	it( 'opens the popover when condition has no term ID (fresh condition)', async () => {
+		await renderConditionRow( {
+			type: 'condition',
+			field: 'categories',
+			operator: '=',
+			value: '',
+		} );
+
+		const panel = container.querySelector( '.iwbe-taxonomy-picker-panel-wrapper' );
+		expect( panel?.getAttribute( 'data-popover-open' ) ).toBe( 'true' );
 	} );
 } );

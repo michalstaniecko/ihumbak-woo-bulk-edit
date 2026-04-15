@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { __ } from '@wordpress/i18n';
 import type { Field, FilterCondition, FilterOperator, TaxonomyTermDetail } from '@/types/api';
 import { TaxonomyTermPicker } from '../TaxonomyTermPicker';
+import { useTaxonomyTermLabels } from '@/hooks/useTaxonomyTerms';
 
 // ── Operator metadata ─────────────────────────────────────────────────────────
 
@@ -98,6 +99,23 @@ export function FilterConditionRow( {
 	const availableOperators = selectedField ? getOperatorsForField( selectedField ) : [];
 	const operatorMeta = OPERATOR_META[ condition.operator ] ?? { valueMode: 'single', label: condition.operator };
 
+	const isTaxonomy = selectedField?.type === 'taxonomy';
+	const isTaxonomyIdOp = TAXONOMY_ID_OPERATORS.includes( condition.operator );
+	const storedTermId =
+		isTaxonomy && isTaxonomyIdOp && typeof condition.value === 'string' && /^\d+$/.test( condition.value )
+			? condition.value
+			: '';
+
+	const labelMap = useTaxonomyTermLabels(
+		storedTermId
+			? [ { field: condition.field, operator: condition.operator, value: storedTermId } ]
+			: [],
+		fields
+	);
+	const resolvedTermLabel = storedTermId ? ( labelMap[ `${ condition.field }:${ storedTermId }` ] ?? '' ) : '';
+
+	const displayLabel = selectedTermName || resolvedTermLabel;
+
 	// Normalize value to string for display in single-value inputs.
 	const singleValue = Array.isArray( condition.value )
 		? ( condition.value as string[] ).join( ',' )
@@ -158,9 +176,6 @@ export function FilterConditionRow( {
 		selectedField?.type === 'price' ||
 		selectedField?.type === 'integer';
 
-	const isTaxonomy = selectedField?.type === 'taxonomy';
-	const isTaxonomyIdOp = TAXONOMY_ID_OPERATORS.includes( condition.operator );
-
 	return (
 		<div className="iwbe-filter-condition-row">
 			{ /* Field selector */ }
@@ -198,7 +213,8 @@ export function FilterConditionRow( {
 				<div className="iwbe-condition-taxonomy-picker">
 					<TaxonomyTermPicker
 						fieldKey={ condition.field }
-						selectedLabel={ selectedTermName }
+						selectedTermId={ storedTermId }
+						selectedLabel={ displayLabel }
 						onSelect={ handleTermSelect }
 						onCancel={ () => {} }
 					/>
