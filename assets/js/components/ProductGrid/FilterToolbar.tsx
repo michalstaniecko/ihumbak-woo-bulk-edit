@@ -1,10 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { __ } from '@wordpress/i18n';
-import type { Field, ProductFilter, FilterOperator, SavedFilterDefinition, TaxonomyTermDetail } from '@/types/api';
+import type { Field, ProductFilter, FilterOperator, SavedFilterDefinition, TaxonomyTermDetail, FilterCondition } from '@/types/api';
 import { SavedFiltersMenu } from './SavedFiltersMenu';
 import { TaxonomyTermPicker } from './TaxonomyTermPicker';
 import { useTaxonomyTermLabels } from '@/hooks/useTaxonomyTerms';
 import { ColumnVisibilityMenu } from './ColumnVisibilityMenu';
+import { FilterGroupBuilder } from './FilterGroupBuilder';
+import { useFiltersStore } from '@/store/useFiltersStore';
 
 interface FilterToolbarProps {
 	fields: Field[];
@@ -24,6 +26,14 @@ const OPERATOR_LABELS: Record< FilterOperator, string > = {
 	'NOT LIKE': __( 'not contains', 'ihumbak-woo-bulk-edit' ),
 	'IS EMPTY': __( 'is empty', 'ihumbak-woo-bulk-edit' ),
 	'IS NOT EMPTY': __( 'is not empty', 'ihumbak-woo-bulk-edit' ),
+	'<': __( 'less than', 'ihumbak-woo-bulk-edit' ),
+	'<=': __( 'less than or equal', 'ihumbak-woo-bulk-edit' ),
+	'>': __( 'greater than', 'ihumbak-woo-bulk-edit' ),
+	'>=': __( 'greater than or equal', 'ihumbak-woo-bulk-edit' ),
+	'IN': __( 'in list', 'ihumbak-woo-bulk-edit' ),
+	'NOT IN': __( 'not in list', 'ihumbak-woo-bulk-edit' ),
+	'BETWEEN': __( 'between', 'ihumbak-woo-bulk-edit' ),
+	'REGEXP': __( 'matches pattern', 'ihumbak-woo-bulk-edit' ),
 };
 
 const ALL_OPERATORS: FilterOperator[] = [
@@ -33,6 +43,14 @@ const ALL_OPERATORS: FilterOperator[] = [
 	'NOT LIKE',
 	'IS EMPTY',
 	'IS NOT EMPTY',
+	'<',
+	'<=',
+	'>',
+	'>=',
+	'IN',
+	'NOT IN',
+	'BETWEEN',
+	'REGEXP',
 ];
 
 const UNARY_OPERATORS: FilterOperator[] = [ 'IS EMPTY', 'IS NOT EMPTY' ];
@@ -276,8 +294,84 @@ export function FilterToolbar( {
 		);
 	};
 
+	// ── Filter Builder modal state ──────────────────────────────────────────────
+
+	const [ builderOpen, setBuilderOpen ] = useState( false );
+
+	const {
+		root,
+		addCondition,
+		addGroup,
+		removeNode,
+		updateCondition,
+		setCombinator,
+	} = useFiltersStore();
+
+	const hasNestedGroups = root.children.some( ( c ) => c.type === 'group' );
+	const isComplex = root.combinator === 'OR' || hasNestedGroups;
+
+	const handleAddDefaultCondition = ( groupPath: string ) => {
+		const firstField = fields.find( ( f ) => f.filterable );
+		if ( ! firstField ) return;
+		const newCond: FilterCondition = {
+			type: 'condition',
+			field: firstField.key,
+			operator: '=',
+			value: '',
+		};
+		addCondition( groupPath, newCond );
+	};
+
 	return (
 		<div className="iwbe-filter-toolbar">
+
+			{ /* Filter Builder Modal */ }
+			{ builderOpen && (
+				<div
+					className="iwbe-filter-builder-modal-overlay"
+					role="dialog"
+					aria-modal="true"
+					aria-label={ __( 'Filter builder', 'ihumbak-woo-bulk-edit' ) }
+				>
+					<div className="iwbe-filter-builder-modal">
+						<div className="iwbe-filter-builder-modal-header">
+							<h2>{ __( 'Filter builder', 'ihumbak-woo-bulk-edit' ) }</h2>
+							<button
+								type="button"
+								className="iwbe-filter-builder-modal-close"
+								onClick={ () => setBuilderOpen( false ) }
+								aria-label={ __( 'Close filter builder', 'ihumbak-woo-bulk-edit' ) }
+							>
+								×
+							</button>
+						</div>
+						<div className="iwbe-filter-builder-modal-body">
+							<FilterGroupBuilder
+								group={ root }
+								path=""
+								depth={ 0 }
+								maxDepth={ 5 }
+								fields={ fields }
+								onAddCondition={ handleAddDefaultCondition }
+								onAddGroup={ ( groupPath ) => addGroup( groupPath, 'AND' ) }
+								onRemoveNode={ removeNode }
+								onUpdateCondition={ updateCondition }
+								onSetCombinator={ setCombinator }
+							/>
+						</div>
+						<div className="iwbe-filter-builder-modal-footer">
+							<button
+								type="button"
+								className="button button-primary"
+								onClick={ () => setBuilderOpen( false ) }
+							>
+								{ __( 'Done', 'ihumbak-woo-bulk-edit' ) }
+							</button>
+						</div>
+					</div>
+				</div>
+			) }
+
 			<div className="iwbe-filter-toolbar-row">
 				<div className="iwbe-filter-search">
 					<input
@@ -375,9 +469,18 @@ export function FilterToolbar( {
 					onApplyPreset={ onApplyPreset }
 				/>
 
+				<button
+					type="button"
+					className="iwbe-filter-builder-btn"
+					onClick={ () => setBuilderOpen( true ) }
+					title={ __( 'Open filter builder for AND/OR logic', 'ihumbak-woo-bulk-edit' ) }
+				>
+					{ __( 'Filter builder', 'ihumbak-woo-bulk-edit' ) }
+				</button>
+
 				<ColumnVisibilityMenu fields={ fields } />
 
-				{ filters.length > 0 && (
+				{ ( filters.length > 0 || root.children.length > 0 ) && (
 					<button
 						type="button"
 						className="iwbe-filter-clear-all"
@@ -388,7 +491,31 @@ export function FilterToolbar( {
 				) }
 			</div>
 
-			{ filters.length > 0 && (
+			{ /* Complex tree: show summary with Edit button */ }
+			{ isComplex && root.children.length > 0 && (
+				<div className="iwbe-filter-chips iwbe-filter-chips--complex">
+					<span className="iwbe-complex-filter-summary">
+						{ __(
+							'Complex filter active',
+							'ihumbak-woo-bulk-edit'
+						) }{ ' ' }
+						({ root.children.length }{ ' ' }
+						{ root.combinator === 'OR'
+							? __( 'OR conditions', 'ihumbak-woo-bulk-edit' )
+							: __( 'conditions/groups', 'ihumbak-woo-bulk-edit' ) })
+					</span>
+					<button
+						type="button"
+						className="iwbe-filter-builder-edit-btn"
+						onClick={ () => setBuilderOpen( true ) }
+					>
+						{ __( 'Edit', 'ihumbak-woo-bulk-edit' ) }
+					</button>
+				</div>
+			) }
+
+			{ /* Simple flat AND-only tree: show chips */ }
+			{ ! isComplex && filters.length > 0 && (
 				<div className="iwbe-filter-chips">
 					{ filters.map( ( filter, index ) => (
 						<div key={ index } className="iwbe-filter-chip">

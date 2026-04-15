@@ -1,8 +1,8 @@
 import { fetchProducts } from '@/api/products';
-import type { Product, ProductFilter, Sort } from '@/types/api';
+import type { Product, ProductFilter, Sort, FilterGroup } from '@/types/api';
 
 interface FetchAllParams {
-	filters: ProductFilter[];
+	filters: ProductFilter[] | FilterGroup;
 	sort: Sort;
 	chunkSize?: number;
 	maxProducts?: number;

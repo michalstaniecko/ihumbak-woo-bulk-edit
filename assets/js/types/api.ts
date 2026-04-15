@@ -137,6 +137,14 @@ export const FilterOperatorSchema = z.enum( [
 	'NOT LIKE',
 	'IS EMPTY',
 	'IS NOT EMPTY',
+	'<',
+	'<=',
+	'>',
+	'>=',
+	'IN',
+	'NOT IN',
+	'BETWEEN',
+	'REGEXP',
 ] );
 export type FilterOperator = z.infer< typeof FilterOperatorSchema >;
 
@@ -146,6 +154,61 @@ export const ProductFilterSchema = z.object( {
 	value: z.string().optional(),
 } );
 export type ProductFilter = z.infer< typeof ProductFilterSchema >;
+
+// ── AND/OR Filter Tree (Issue #19) ────────────────────────────
+export const FilterConditionSchema = z.object( {
+	type: z.literal( 'condition' ),
+	field: z.string(),
+	operator: FilterOperatorSchema,
+	value: z
+		.union( [
+			z.string(),
+			z.array( z.string() ),
+			z.tuple( [ z.string(), z.string() ] ),
+		] )
+		.optional(),
+} );
+export type FilterCondition = z.infer< typeof FilterConditionSchema >;
+
+/**
+ * FilterGroup — a recursive AND/OR group of conditions or nested groups.
+ *
+ * Defined as an interface (not z.infer) so z.lazy can reference it without
+ * TypeScript circular-type inference issues.
+ */
+export interface FilterGroup {
+	type: 'group';
+	combinator: 'AND' | 'OR';
+	children: FilterNode[];
+}
+export type FilterNode = FilterCondition | FilterGroup;
+
+export const FilterGroupSchema: z.ZodType< FilterGroup > = z.lazy( () =>
+	z.object( {
+		type: z.literal( 'group' ),
+		combinator: z.enum( [ 'AND', 'OR' ] ),
+		children: z.array( z.union( [ FilterConditionSchema, FilterGroupSchema ] ) ),
+	} )
+);
+
+/**
+ * Convert a legacy flat ProductFilter array to a FilterGroup tree.
+ * Useful when loading saved filter presets from the old format.
+ */
+export function legacyFiltersToGroup( filters: ProductFilter[] ): FilterGroup {
+	return {
+		type: 'group',
+		combinator: 'AND',
+		children: filters.map(
+			( f ): FilterCondition => ( {
+				type: 'condition',
+				field: f.field,
+				operator: f.operator,
+				value: f.value,
+			} )
+		),
+	};
+}
 
 export const SortSchema = z.object( {
 	field: z.string(),
@@ -161,7 +224,7 @@ export type Pagination = z.infer< typeof PaginationSchema >;
 
 // POST /products/query request body
 export const ProductsQueryParamsSchema = z.object( {
-	filters: z.array( ProductFilterSchema ).default( [] ),
+	filters: z.union( [ z.array( ProductFilterSchema ), FilterGroupSchema ] ).default( [] ),
 	sort: SortSchema.default( { field: 'name', order: 'asc' } ),
 	page: z.number().min( 1 ).default( 1 ),
 	per_page: z.number().min( 10 ).max( 500 ).default( 50 ),
@@ -273,12 +336,24 @@ export interface ChangelogQueryParams {
 }
 
 // ── Saved Filters ────────────────────────────────────────────
-export const SavedFilterDefinitionSchema = z.object( {
-	filters: z.array( ProductFilterSchema ),
+
+/**
+ * Explicit interface — bypasses Zod type-inference issues with z.lazy + union + default.
+ * The `filters` field is always present after parsing (default = []).
+ */
+export interface SavedFilterDefinition {
+	filters: ProductFilter[] | FilterGroup;
+	search: string;
+	sort?: Sort;
+}
+
+export const SavedFilterDefinitionSchema: z.ZodType< SavedFilterDefinition > = z.object( {
+	filters: z
+		.union( [ z.array( ProductFilterSchema ), FilterGroupSchema ] )
+		.default( [] as ProductFilter[] ) as z.ZodType< ProductFilter[] | FilterGroup >,
 	search: z.string().optional().default( '' ),
 	sort: SortSchema.optional(),
-} );
-export type SavedFilterDefinition = z.infer< typeof SavedFilterDefinitionSchema >;
+} ) as z.ZodType< SavedFilterDefinition >;
 
 export const SavedFilterSchema = z.object( {
 	id: z.number(),

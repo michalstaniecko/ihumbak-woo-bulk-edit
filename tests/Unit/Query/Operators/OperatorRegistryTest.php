@@ -17,7 +17,7 @@ final class OperatorRegistryTest extends TestCase
         $this->registry = new OperatorRegistry();
     }
 
-    public function test_constructor_registers_six_operators(): void
+    public function test_constructor_registers_fourteen_operators(): void
     {
         self::assertNotNull($this->registry->get('='));
         self::assertNotNull($this->registry->get('!='));
@@ -25,6 +25,14 @@ final class OperatorRegistryTest extends TestCase
         self::assertNotNull($this->registry->get('NOT LIKE'));
         self::assertNotNull($this->registry->get('IS EMPTY'));
         self::assertNotNull($this->registry->get('IS NOT EMPTY'));
+        self::assertNotNull($this->registry->get('<'));
+        self::assertNotNull($this->registry->get('<='));
+        self::assertNotNull($this->registry->get('>'));
+        self::assertNotNull($this->registry->get('>='));
+        self::assertNotNull($this->registry->get('IN'));
+        self::assertNotNull($this->registry->get('NOT IN'));
+        self::assertNotNull($this->registry->get('BETWEEN'));
+        self::assertNotNull($this->registry->get('REGEXP'));
     }
 
     public function test_get_is_case_insensitive(): void
@@ -37,7 +45,7 @@ final class OperatorRegistryTest extends TestCase
 
     public function test_get_unknown_returns_null(): void
     {
-        self::assertNull($this->registry->get('>='));
+        self::assertNull($this->registry->get('~~DOES_NOT_EXIST~~'));
     }
 
     public function test_has_returns_true_for_registered(): void
@@ -47,7 +55,7 @@ final class OperatorRegistryTest extends TestCase
 
     public function test_has_returns_false_for_unknown(): void
     {
-        self::assertFalse($this->registry->has('>='));
+        self::assertFalse($this->registry->has('~~DOES_NOT_EXIST~~'));
     }
 
     public function test_has_is_case_insensitive(): void
@@ -59,10 +67,10 @@ final class OperatorRegistryTest extends TestCase
     public function test_register_custom_operator(): void
     {
         $custom = $this->createMock(OperatorInterface::class);
-        $custom->method('getIdentifier')->willReturn('>=');
+        $custom->method('getIdentifier')->willReturn('~~CUSTOM~~');
 
         $this->registry->register($custom);
 
-        self::assertSame($custom, $this->registry->get('>='));
+        self::assertSame($custom, $this->registry->get('~~CUSTOM~~'));
     }
 }

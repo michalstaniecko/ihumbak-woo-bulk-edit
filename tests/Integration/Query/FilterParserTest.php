@@ -58,7 +58,7 @@ final class FilterParserTest extends WP_UnitTestCase
     {
         $builder = new QueryBuilder();
         $result = $this->parser->apply($builder, [
-            ['field' => 'name', 'operator' => '>=', 'value' => 'test'],
+            ['field' => 'name', 'operator' => '~~UNKNOWN~~', 'value' => 'test'],
         ]);
 
         self::assertInstanceOf(WP_Error::class, $result);

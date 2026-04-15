@@ -208,24 +208,7 @@ final class QueryBuilder
      */
     public function addTaxonomyCondition(string $taxonomy, string $nameClauseSql, array $values, bool $negate): self
     {
-        global $wpdb;
-
-        $not = $negate ? 'NOT ' : '';
-        // tr.object_id is BIGINT NOT NULL — NOT IN is safe (no NULL propagation).
-        // Outer p.post_type filter (see buildWhere) constrains matches to products only.
-        $sql = "p.ID {$not}IN (
-            SELECT tr.object_id
-            FROM {$wpdb->term_relationships} tr
-            INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
-            INNER JOIN {$wpdb->terms} t ON t.term_id = tt.term_id
-            WHERE tt.taxonomy = %s AND {$nameClauseSql}
-        )";
-
-        $this->conditions[] = [
-            'sql'    => $sql,
-            'values' => array_merge([$taxonomy], $values),
-        ];
-
+        $this->conditions[] = $this->buildTaxonomySubquerySql($taxonomy, $nameClauseSql, $values, $negate);
         return $this;
     }
 
@@ -256,6 +239,66 @@ final class QueryBuilder
         if (empty($termIds)) {
             return $this;
         }
+        $this->conditions[] = $this->buildTaxonomyTermIdSql($taxonomy, $termIds, $negate);
+        return $this;
+    }
+
+    /**
+     * Add a WHERE condition for "has any / has no" terms in a taxonomy.
+     *
+     * @param string $taxonomy WP taxonomy slug
+     * @param bool   $exists   true → product has at least one term; false → product has zero terms
+     */
+    public function addTaxonomyExistsCondition(string $taxonomy, bool $exists): self
+    {
+        $result = $this->buildTaxonomyExistsSql($taxonomy, $exists);
+        $this->conditions[] = $result;
+        return $this;
+    }
+
+    // ── "Build" helpers — return SQL/values without pushing ───────────────
+
+    /**
+     * Build SQL for a taxonomy name-clause condition without pushing to the builder.
+     *
+     * @param string      $taxonomy      WP taxonomy slug
+     * @param string      $nameClauseSql SQL clause on column "t.name"
+     * @param list<mixed> $values        Bound values for $nameClauseSql
+     * @param bool        $negate        If true, wrap with NOT IN
+     * @return array{sql: string, values: list<mixed>}
+     */
+    public function buildTaxonomySubquerySql(string $taxonomy, string $nameClauseSql, array $values, bool $negate): array
+    {
+        global $wpdb;
+
+        $not = $negate ? 'NOT ' : '';
+        $sql = "p.ID {$not}IN (
+            SELECT tr.object_id
+            FROM {$wpdb->term_relationships} tr
+            INNER JOIN {$wpdb->term_taxonomy} tt ON tt.term_taxonomy_id = tr.term_taxonomy_id
+            INNER JOIN {$wpdb->terms} t ON t.term_id = tt.term_id
+            WHERE tt.taxonomy = %s AND {$nameClauseSql}
+        )";
+
+        return [
+            'sql'    => $sql,
+            'values' => array_merge([$taxonomy], $values),
+        ];
+    }
+
+    /**
+     * Build SQL for a taxonomy term_id membership condition without pushing to the builder.
+     *
+     * @param string    $taxonomy WP taxonomy slug
+     * @param list<int> $termIds  One or more term IDs; returns tautology if empty
+     * @param bool      $negate   If true, wrap with NOT IN
+     * @return array{sql: string, values: list<mixed>}
+     */
+    public function buildTaxonomyTermIdSql(string $taxonomy, array $termIds, bool $negate): array
+    {
+        if (empty($termIds)) {
+            return ['sql' => '1=1', 'values' => []];
+        }
 
         global $wpdb;
 
@@ -269,25 +312,24 @@ final class QueryBuilder
             WHERE tt.taxonomy = %s AND tt.term_id IN ({$placeholders})
         )";
 
-        $this->conditions[] = [
+        return [
             'sql'    => $sql,
             'values' => array_merge([$taxonomy], $termIds),
         ];
-
-        return $this;
     }
 
     /**
-     * Add a WHERE condition for "has any / has no" terms in a taxonomy.
+     * Build SQL for a taxonomy exists / not-exists check without pushing to the builder.
      *
      * @param string $taxonomy WP taxonomy slug
-     * @param bool   $exists   true → product has at least one term; false → product has zero terms
+     * @param bool   $exists   true → IN; false → NOT IN
+     * @return array{sql: string, values: list<mixed>}
      */
-    public function addTaxonomyExistsCondition(string $taxonomy, bool $exists): self
+    public function buildTaxonomyExistsSql(string $taxonomy, bool $exists): array
     {
         global $wpdb;
 
-        $in = $exists ? 'IN' : 'NOT IN';
+        $in  = $exists ? 'IN' : 'NOT IN';
         $sql = "p.ID {$in} (
             SELECT tr.object_id
             FROM {$wpdb->term_relationships} tr
@@ -295,12 +337,10 @@ final class QueryBuilder
             WHERE tt.taxonomy = %s
         )";
 
-        $this->conditions[] = [
+        return [
             'sql'    => $sql,
             'values' => [$taxonomy],
         ];
-
-        return $this;
     }
 
     /**
@@ -377,9 +417,17 @@ final class QueryBuilder
         $joins = '';
 
         foreach ($this->metaJoins as $join) {
-            $alias = $join['alias'];
+            $alias   = $join['alias'];   // safe: always "m" + integer counter
             $metaKey = $join['meta_key'];
-            $joins .= " LEFT JOIN {$wpdb->postmeta} {$alias} ON (p.ID = {$alias}.post_id AND {$alias}.meta_key = '{$metaKey}')";
+
+            // Use $wpdb->prepare() for $metaKey even though all callers today
+            // pass values from the hardcoded META_KEYS constant. This keeps the
+            // method safe if a future code path (e.g. custom meta) passes an
+            // arbitrary string.
+            $joins .= $wpdb->prepare(
+                " LEFT JOIN {$wpdb->postmeta} {$alias} ON (p.ID = {$alias}.post_id AND {$alias}.meta_key = %s)",
+                $metaKey
+            );
         }
 
         return $joins;

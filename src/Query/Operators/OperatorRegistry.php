@@ -41,6 +41,14 @@ final class OperatorRegistry
             new NotLikeOperator(),
             new IsEmptyOperator(),
             new IsNotEmptyOperator(),
+            new LessThanOperator(),
+            new LessThanOrEqualOperator(),
+            new GreaterThanOperator(),
+            new GreaterThanOrEqualOperator(),
+            new InOperator(),
+            new NotInOperator(),
+            new BetweenOperator(),
+            new RegexpOperator(),
         ];
 
         foreach ($defaults as $operator) {

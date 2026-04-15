@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { __, sprintf } from '@wordpress/i18n';
-import type { Field, Product, ProductFilter, Sort } from '@/types/api';
+import type { Field, Product, ProductFilter, Sort, FilterGroup } from '@/types/api';
 import { useChangesStore } from '@/store';
 import {
 	applyBulkOperation,
@@ -25,7 +25,7 @@ export interface BulkEditModalProps {
 	field: Field;
 	selectedProducts: Product[];
 	totalFiltered: number;
-	filters: ProductFilter[];
+	filters: ProductFilter[] | FilterGroup;
 	sort: Sort;
 	onClose: () => void;
 }

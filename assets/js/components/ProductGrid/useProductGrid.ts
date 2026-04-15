@@ -16,9 +16,10 @@ import { useFields } from '@/hooks/useFields';
 import { useVariations } from '@/hooks/useVariations';
 import { createColumns } from './columnFactory';
 import type { GridPaginationState } from '@/types/grid';
-import type { Field, Product, ProductFilter, Sort, VariationsResponse, SavedFilterDefinition } from '@/types/api';
+import type { Field, Product, ProductFilter, Sort, VariationsResponse, SavedFilterDefinition, FilterGroup, FilterCondition } from '@/types/api';
 // VariationsResponse is used by the variationsMap type in the return shape.
 import { useExpansionStore, useFiltersStore, useColumnVisibilityStore } from '@/store';
+import { selectLegacyFilters } from '@/store/useFiltersStore';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 
 export interface UseProductGridReturn {
@@ -33,7 +34,7 @@ export interface UseProductGridReturn {
 	fields: Field[];
 	products: Product[];
 	filters: ProductFilter[];
-	effectiveFilters: ProductFilter[];
+	effectiveFilters: FilterGroup | ProductFilter[];
 	sort: Sort;
 	searchQuery: string;
 	onSearchChange: ( query: string ) => void;
@@ -97,9 +98,10 @@ export function useProductGrid(): UseProductGridReturn {
 	const lastSelectedIndexRef = useRef< number | null >( null );
 
 	// Filter state — delegated to useFiltersStore so SavedFiltersMenu can call applyPreset
-	const filters = useFiltersStore( ( s ) => s.filters );
+	const root = useFiltersStore( ( s ) => s.root );
 	const searchQuery = useFiltersStore( ( s ) => s.searchQuery );
-	const setFilters = useFiltersStore( ( s ) => s.setFilters );
+	// Derive the flat legacy filter list from root (memoized to keep stable reference).
+	const filters = useMemo( () => selectLegacyFilters( root ), [ root ] );
 	const storeAddFilter = useFiltersStore( ( s ) => s.addFilter );
 	const storeRemoveFilter = useFiltersStore( ( s ) => s.removeFilter );
 	const storeClearAll = useFiltersStore( ( s ) => s.clearAll );
@@ -119,20 +121,40 @@ export function useProductGrid(): UseProductGridReturn {
 	// Reset to page 1 when filters or search change
 	useEffect( () => {
 		setPaginationState( ( prev ) => ( { ...prev, page: 1 } ) );
-	}, [ filters, debouncedSearch ] );
+	}, [ root, debouncedSearch ] );
 
-	// Combine explicit filters with search query filters
-	const apiFilters = useMemo( () => {
-		const combined = [ ...filters ];
-		if ( debouncedSearch.trim() ) {
-			combined.push( {
-				field: 'name',
-				operator: 'LIKE',
-				value: debouncedSearch.trim(),
-			} );
+	// Combine the filter tree with the debounced search query.
+	// If there's a search term, wrap root + search in an AND group.
+	const apiFilters = useMemo( (): FilterGroup | ProductFilter[] => {
+		const hasSearch = debouncedSearch.trim() !== '';
+		const hasFilters = root.children.length > 0;
+
+		if ( ! hasSearch && ! hasFilters ) return [];
+
+		if ( ! hasSearch ) return root;
+
+		const searchCondition: FilterCondition = {
+			type: 'condition',
+			field: 'name',
+			operator: 'LIKE',
+			value: debouncedSearch.trim(),
+		};
+
+		if ( ! hasFilters ) {
+			return {
+				type: 'group',
+				combinator: 'AND',
+				children: [ searchCondition ],
+			};
 		}
-		return combined;
-	}, [ filters, debouncedSearch ] );
+
+		// Wrap both in an AND group.
+		return {
+			type: 'group',
+			combinator: 'AND',
+			children: [ root, searchCondition ],
+		};
+	}, [ root, debouncedSearch ] );
 
 	const onSearchChange = useCallback( ( query: string ) => {
 		storeSetSearchQuery( query );

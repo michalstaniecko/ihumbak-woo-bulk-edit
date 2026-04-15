@@ -6,12 +6,14 @@ import type {
 	Sort,
 	Pagination,
 	ProductsResponse,
+	FilterGroup,
 } from '@/types/api';
 
 const PRODUCTS_QUERY_KEY = 'products' as const;
 
 interface UseProductsParams {
-	filters?: ProductFilter[];
+	/** Legacy flat filter array OR new filter group tree. */
+	filters?: ProductFilter[] | FilterGroup;
 	sort?: Sort;
 	pagination?: Pagination;
 	enabled?: boolean;
