@@ -1,0 +1,206 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG_NAME#v}"
+          echo "tag=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Extracted version: ${VERSION} from tag: ${TAG_NAME}"
+
+      - name: Validate semver format
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(stable|beta|b|rc|alpha|a|patch|pl|p|dev)[0-9]*)?$ ]]; then
+            echo "Error: Invalid version format '${VERSION}'"
+            echo "Valid examples: 1.0.0, 1.0.0-beta, 1.0.0-beta1, 1.0.0-rc1, 1.0.0-alpha, 1.0.0-dev"
+            exit 1
+          fi
+          echo "Version format is valid: ${VERSION}"
+
+      - name: Verify version in project files
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          ERRORS=0
+
+          # Check Version header in plugin file
+          PLUGIN_HEADER_VERSION=$(grep -E "^\s*\*\s*Version:" ihumbak-woo-bulk-edit.php | sed 's/.*Version:\s*//' | tr -d '[:space:]')
+          if [[ "$PLUGIN_HEADER_VERSION" != "$VERSION" ]]; then
+            echo "Warning: Plugin header version mismatch - expected '${VERSION}', found '${PLUGIN_HEADER_VERSION}'"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "Plugin header version matches: ${PLUGIN_HEADER_VERSION}"
+          fi
+
+          # Check version constant IWBE_VERSION
+          CONSTANT_VERSION=$(grep "IWBE_VERSION" ihumbak-woo-bulk-edit.php | sed "s/.*'\([^']*\)'.*/\1/")
+          if [[ "$CONSTANT_VERSION" != "$VERSION" ]]; then
+            echo "Warning: IWBE_VERSION mismatch - expected '${VERSION}', found '${CONSTANT_VERSION}'"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "IWBE_VERSION matches: ${CONSTANT_VERSION}"
+          fi
+
+          # Check package.json version
+          PKG_VERSION=$(grep '"version"' package.json | head -1 | sed 's/.*"version":\s*"\([^"]*\)".*/\1/')
+          if [[ "$PKG_VERSION" != "$VERSION" ]]; then
+            echo "Warning: package.json version mismatch - expected '${VERSION}', found '${PKG_VERSION}'"
+            ERRORS=$((ERRORS + 1))
+          else
+            echo "package.json version matches: ${PKG_VERSION}"
+          fi
+
+          if [[ $ERRORS -gt 0 ]]; then
+            echo ""
+            echo "Warning: ${ERRORS} version mismatch(es) found. Proceeding with build anyway."
+            echo "Please update version numbers before the next release."
+          fi
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: dom, curl, libxml, mbstring, zip
+          tools: composer:v2
+          coverage: none
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-release-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-release-
+            ${{ runner.os }}-composer-
+
+      - name: Install production dependencies
+        run: composer install --no-dev --optimize-autoloader --no-progress --no-interaction
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Build release ZIP
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          PLUGIN_SLUG="ihumbak-woo-bulk-edit"
+          BUILD_DIR="build"
+          ZIP_NAME="${PLUGIN_SLUG}-${VERSION}.zip"
+
+          mkdir -p "${BUILD_DIR}/${PLUGIN_SLUG}"
+
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.gitignore' \
+            --exclude='.gitattributes' \
+            --exclude='.editorconfig' \
+            --exclude='.phpcs.xml' \
+            --exclude='.phpunit.result.cache' \
+            --exclude='.phpunit.cache' \
+            --exclude='.claude' \
+            --exclude='phpcs.xml' \
+            --exclude='phpstan.neon' \
+            --exclude='phpunit.xml' \
+            --exclude='phpunit.xml.dist' \
+            --exclude='composer.lock' \
+            --exclude='CLAUDE.md' \
+            --exclude='PLAN.md' \
+            --exclude='tests' \
+            --exclude='scripts' \
+            --exclude='stubs' \
+            --exclude='docs' \
+            --exclude='build' \
+            --exclude='dist' \
+            --exclude='node_modules' \
+            --exclude='.github' \
+            --exclude='.vscode' \
+            --exclude='.idea' \
+            --exclude='*.log' \
+            --exclude='*.cache' \
+            --exclude='package-lock.json' \
+            --exclude='webpack.config.js' \
+            --exclude='tsconfig.json' \
+            --exclude='vitest.config.ts' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='.DS_Store' \
+            --exclude='.playwright-mcp' \
+            --exclude='assets/js' \
+            ./ "${BUILD_DIR}/${PLUGIN_SLUG}/"
+
+          cd "${BUILD_DIR}"
+          zip -r "../${ZIP_NAME}" "${PLUGIN_SLUG}"
+          cd ..
+
+          echo "Created: ${ZIP_NAME}"
+          ls -lh "${ZIP_NAME}"
+
+          echo "zip_name=${ZIP_NAME}" >> $GITHUB_ENV
+
+      - name: Determine pre-release status
+        id: prerelease
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if [[ "$VERSION" =~ (alpha|beta|rc|dev) ]]; then
+            echo "is_prerelease=true" >> $GITHUB_OUTPUT
+            echo "Version ${VERSION} is a pre-release"
+          else
+            echo "is_prerelease=false" >> $GITHUB_OUTPUT
+            echo "Version ${VERSION} is a stable release"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.zip_name }}
+          name: v${{ steps.version.outputs.version }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          prerelease: ${{ steps.prerelease.outputs.is_prerelease }}
+          generate_release_notes: true
+          body: |
+            ## Ihumbak WooCommerce Bulk Edit v${{ steps.version.outputs.version }}
+
+            ### Installation
+
+            1. Download `${{ env.zip_name }}` from the assets below
+            2. Go to WordPress Admin > Plugins > Add New > Upload Plugin
+            3. Upload the ZIP file and click "Install Now"
+            4. Activate the plugin
+
+            ### Requirements
+
+            - PHP 8.1+
+            - WordPress 6.4+
+            - WooCommerce 8.0+
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
