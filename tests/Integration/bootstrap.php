@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+// Disable update checker in tests to avoid PucFactory initialization issues.
+if (! defined('IWBE_DISABLE_UPDATES')) {
+    define('IWBE_DISABLE_UPDATES', true);
+}
+
 $_tests_dir = getenv('WP_TESTS_DIR') ?: '/tmp/wordpress-tests-lib';
 
 if (! file_exists($_tests_dir . '/includes/functions.php')) {

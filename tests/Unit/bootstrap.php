@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+// Disable update checker in tests to avoid PucFactory initialization issues.
+if (! defined('IWBE_DISABLE_UPDATES')) {
+    define('IWBE_DISABLE_UPDATES', true);
+}
+
 require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 
 // Minimal stubs for WordPress/WooCommerce functions used by unit-testable classes.

@@ -6,6 +6,7 @@ namespace IhumbakWooBulkEdit;
 
 use IhumbakWooBulkEdit\Admin\Menu;
 use IhumbakWooBulkEdit\Admin\AssetsLoader;
+use IhumbakWooBulkEdit\Modules\Updates\UpdateService;
 use IhumbakWooBulkEdit\Api\ChangelogController;
 use IhumbakWooBulkEdit\Api\FieldsController;
 use IhumbakWooBulkEdit\Api\FiltersController;
@@ -67,6 +68,11 @@ final class Plugin
         }
 
         $this->booted = true;
+
+        $update_service = new UpdateService();
+        if ($update_service->is_enabled()) {
+            $update_service->init();
+        }
 
         $this->registerServices();
         $this->registerHooks();
