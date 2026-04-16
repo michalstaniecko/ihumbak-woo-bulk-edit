@@ -3,7 +3,7 @@
  * Plugin Name:       Ihumbak WooCommerce Bulk Edit
  * Plugin URI:        https://github.com/michalstaniecko/ihumbak-woo-bulk-edit
  * Description:       Bulk edit WooCommerce products with preview & commit UX, SQL-like filtering, formula engine, and audit log with rollback.
- * Version:           0.1.1
+ * Version:           0.1.2
  * Requires at least: 6.4
  * Requires PHP:      8.1
  * Author:            Michal Staniecko
@@ -22,7 +22,7 @@ declare(strict_types=1);
 
 defined('ABSPATH') || exit;
 
-define('IWBE_VERSION', '0.1.1');
+define('IWBE_VERSION', '0.1.2');
 define('IWBE_PLUGIN_FILE', __FILE__);
 define('IWBE_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('IWBE_PLUGIN_URL', plugin_dir_url(__FILE__));
