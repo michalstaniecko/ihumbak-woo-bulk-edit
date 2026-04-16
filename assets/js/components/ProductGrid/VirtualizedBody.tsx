@@ -124,7 +124,7 @@ export function VirtualizedBody( {
 			rowCount={ itemCount }
 			rowHeight={ rowHeight }
 			rowProps={ {} }
-			style={ { maxHeight: MAX_VISIBLE_HEIGHT } }
+			style={ { maxHeight: MAX_VISIBLE_HEIGHT, overflowX: 'hidden' } }
 		/>
 	);
 }

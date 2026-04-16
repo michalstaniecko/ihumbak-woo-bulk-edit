@@ -109,8 +109,11 @@ export function createColumns(
 	const selectionColumn: ColumnDef< Product, unknown > = {
 		id: 'select',
 		size: 40,
+		minSize: 40,
+		maxSize: 40,
 		enableSorting: false,
 		enableHiding: false,
+		enableResizing: false,
 		meta: { isSelection: true } as SelectionColumnMeta,
 	};
 
@@ -119,8 +122,11 @@ export function createColumns(
 		accessorKey: 'id',
 		header: __( 'ID', 'ihumbak-woo-bulk-edit' ),
 		size: 60,
+		minSize: 50,
+		maxSize: 200,
 		enableSorting: true,
 		enableHiding: false,
+		enableResizing: true,
 	};
 
 	const fieldColumns: ColumnDef< Product, unknown >[] = fields.map(
@@ -129,8 +135,11 @@ export function createColumns(
 			accessorKey: field.key,
 			header: field.label,
 			size: COLUMN_WIDTHS[ field.type ] ?? 150,
+			minSize: 50,
+			maxSize: 600,
 			enableSorting: field.sortable,
 			enableHiding: true,
+			enableResizing: true,
 			meta: { field } as FieldColumnMeta,
 		} )
 	);

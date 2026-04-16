@@ -6,7 +6,6 @@ import { Pagination } from './Pagination';
 import { StatusBar } from './StatusBar';
 import { LoadingSkeleton } from './LoadingSkeleton';
 import { FilterToolbar } from './FilterToolbar';
-import { getColumnWidths } from './columnFactory';
 import { useGridKeyboardNav } from '@/hooks/useGridKeyboardNav';
 import { useBatchSave } from '@/hooks/useBatchSave';
 import { BulkEditModal } from './bulkEdit';
@@ -64,9 +63,8 @@ export function ProductGrid(): JSX.Element {
 		return <LoadingSkeleton />;
 	}
 
-	const columnWidths = getColumnWidths(
-		table.getAllColumns().map( ( c ) => c.columnDef )
-	);
+	const visibleColumns = table.getVisibleLeafColumns();
+	const columnWidths = visibleColumns.map( ( c ) => c.getSize() );
 	const totalWidth = columnWidths.reduce( ( sum, w ) => sum + w, 0 );
 
 	const selectedProducts = table

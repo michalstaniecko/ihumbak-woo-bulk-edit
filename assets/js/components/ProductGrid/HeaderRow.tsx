@@ -5,6 +5,7 @@ import { __ } from '@wordpress/i18n';
 import type { Field, Product } from '@/types/api';
 import type { FieldColumnMeta, SelectionColumnMeta } from './columnFactory';
 import { inferBulkOperationKind } from './bulkOperations';
+import { ColumnResizeHandle } from './ColumnResizeHandle';
 
 interface HeaderRowProps {
 	table: Table< Product >;
@@ -118,12 +119,29 @@ function HeaderCellMenu( {
 	);
 }
 
+/** Column IDs that cannot be dragged or used as drop targets for reordering. */
+const PINNED_COLUMN_IDS = new Set< string >( [ 'select', 'id' ] );
+
+function reorderColumns(
+	currentOrder: string[],
+	draggedId: string,
+	targetId: string
+): string[] {
+	const without = currentOrder.filter( ( id ) => id !== draggedId );
+	const targetIndex = without.indexOf( targetId );
+	if ( targetIndex === -1 ) return currentOrder;
+	without.splice( targetIndex, 0, draggedId );
+	return without;
+}
+
 export function HeaderRow( {
 	table,
 	columnWidths,
 	onBulkEdit,
 }: HeaderRowProps ): JSX.Element {
 	const [ openMenu, setOpenMenu ] = useState< string | null >( null );
+	const [ draggedColumnId, setDraggedColumnId ] = useState< string | null >( null );
+	const [ dragOverColumnId, setDragOverColumnId ] = useState< string | null >( null );
 
 	return (
 		<div className="iwbe-header-row">
@@ -133,6 +151,11 @@ export function HeaderRow( {
 					const sorted = header.column.getIsSorted();
 					const meta = header.column.columnDef.meta;
 					const width = columnWidths[ headerIndex ] ?? 150;
+					const isPinned = PINNED_COLUMN_IDS.has( header.column.id );
+					const canResize = header.column.getCanResize();
+					const isResizing = header.column.getIsResizing();
+					const isDraggingThis = draggedColumnId === header.column.id;
+					const isDragOverThis = dragOverColumnId === header.column.id;
 
 					let sortClass = '';
 					if ( sorted === 'asc' ) {
@@ -140,6 +163,10 @@ export function HeaderRow( {
 					} else if ( sorted === 'desc' ) {
 						sortClass = ' iwbe-sort-desc';
 					}
+
+					const resizingClass = isResizing ? ' iwbe-th--resizing' : '';
+					const draggingClass = isDraggingThis ? ' iwbe-th--dragging' : '';
+					const dragOverClass = isDragOverThis ? ' iwbe-th--drag-over' : '';
 
 					if ( isSelectionColumn( meta ) ) {
 						return (
@@ -171,8 +198,39 @@ export function HeaderRow( {
 					return (
 						<div
 							key={ header.id }
-							className={ `iwbe-th${ canSort ? ' iwbe-th-sortable' : '' }${ sortClass }` }
+							className={ `iwbe-th${ canSort ? ' iwbe-th-sortable' : '' }${ sortClass }${ resizingClass }${ draggingClass }${ dragOverClass }` }
 							style={ { width, minWidth: width } }
+							draggable={ ! isPinned }
+							onDragStart={ ! isPinned ? ( e: React.DragEvent< HTMLDivElement > ) => {
+								e.dataTransfer.setData( 'text/plain', header.column.id );
+								e.dataTransfer.effectAllowed = 'move';
+								setDraggedColumnId( header.column.id );
+							} : undefined }
+							onDragOver={ ! isPinned ? ( e: React.DragEvent< HTMLDivElement > ) => {
+								if ( draggedColumnId && draggedColumnId !== header.column.id ) {
+									e.preventDefault();
+									e.dataTransfer.dropEffect = 'move';
+									setDragOverColumnId( header.column.id );
+								}
+							} : undefined }
+							onDragLeave={ ! isPinned ? () => {
+								setDragOverColumnId( null );
+							} : undefined }
+							onDrop={ ! isPinned ? ( e: React.DragEvent< HTMLDivElement > ) => {
+								e.preventDefault();
+								const sourceId = e.dataTransfer.getData( 'text/plain' );
+								if ( sourceId && sourceId !== header.column.id && ! PINNED_COLUMN_IDS.has( sourceId ) ) {
+									const currentOrder = table.getAllLeafColumns().map( ( c ) => c.id );
+									const newOrder = reorderColumns( currentOrder, sourceId, header.column.id );
+									table.setColumnOrder( newOrder );
+								}
+								setDraggedColumnId( null );
+								setDragOverColumnId( null );
+							} : undefined }
+							onDragEnd={ ! isPinned ? () => {
+								setDraggedColumnId( null );
+								setDragOverColumnId( null );
+							} : undefined }
 						>
 							<span
 								className="iwbe-th-label"
@@ -225,6 +283,9 @@ export function HeaderRow( {
 										/>
 									) }
 								</div>
+							) }
+							{ canResize && (
+								<ColumnResizeHandle header={ header } />
 							) }
 						</div>
 					);

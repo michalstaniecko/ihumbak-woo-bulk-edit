@@ -7,6 +7,8 @@ import type {
 	SortingState,
 	RowSelectionState,
 	VisibilityState,
+	ColumnSizingState,
+	ColumnOrderState,
 	OnChangeFn,
 	Table,
 	Row,
@@ -18,7 +20,7 @@ import { createColumns } from './columnFactory';
 import type { GridPaginationState } from '@/types/grid';
 import type { Field, Product, ProductFilter, Sort, VariationsResponse, SavedFilterDefinition, FilterGroup, FilterCondition } from '@/types/api';
 // VariationsResponse is used by the variationsMap type in the return shape.
-import { useExpansionStore, useFiltersStore, useColumnVisibilityStore } from '@/store';
+import { useExpansionStore, useFiltersStore, useColumnVisibilityStore, useColumnLayoutStore } from '@/store';
 import { selectLegacyFilters } from '@/store/useFiltersStore';
 import { useColumnVisibility } from '@/hooks/useColumnVisibility';
 
@@ -94,6 +96,30 @@ export function useProductGrid(): UseProductGridReturn {
 			setHidden( newHidden );
 		},
 		[ columnVisibility, setHidden ]
+	);
+
+	// Column sizing — persisted in localStorage via useColumnLayoutStore
+	const columnSizing = useColumnLayoutStore( ( s ) => s.columnSizing );
+	const columnOrder = useColumnLayoutStore( ( s ) => s.columnOrder );
+	const storeSetColumnSizing = useColumnLayoutStore( ( s ) => s.setColumnSizing );
+	const storeSetColumnOrder = useColumnLayoutStore( ( s ) => s.setColumnOrder );
+
+	const handleColumnSizingChange: OnChangeFn< ColumnSizingState > = useCallback(
+		( updater ) => {
+			const newState =
+				typeof updater === 'function' ? updater( columnSizing ) : updater;
+			storeSetColumnSizing( newState );
+		},
+		[ columnSizing, storeSetColumnSizing ]
+	);
+
+	const handleColumnOrderChange: OnChangeFn< ColumnOrderState > = useCallback(
+		( updater ) => {
+			const newState =
+				typeof updater === 'function' ? updater( columnOrder ) : updater;
+			storeSetColumnOrder( newState );
+		},
+		[ columnOrder, storeSetColumnOrder ]
 	);
 	const lastSelectedIndexRef = useRef< number | null >( null );
 
@@ -238,16 +264,22 @@ export function useProductGrid(): UseProductGridReturn {
 			sorting,
 			rowSelection,
 			columnVisibility,
+			columnSizing,
+			columnOrder,
 		},
 		onSortingChange: handleSortingChange,
 		onRowSelectionChange: handleRowSelectionChange,
 		onColumnVisibilityChange: handleColumnVisibilityChange,
+		onColumnSizingChange: handleColumnSizingChange,
+		onColumnOrderChange: handleColumnOrderChange,
 		getCoreRowModel: getCoreRowModel(),
 		manualSorting: true,
 		manualPagination: true,
 		enableRowSelection: true,
 		enableMultiRowSelection: true,
 		enableHiding: true,
+		enableColumnResizing: true,
+		columnResizeMode: 'onChange',
 		getRowId: ( row ) => String( row.id ),
 	} );
 

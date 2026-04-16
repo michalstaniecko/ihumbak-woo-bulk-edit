@@ -308,6 +308,55 @@
 	opacity: 1;
 }
 
+/* ── Column resize handle ───────────────────────────────── */
+
+.iwbe-resize-handle {
+	position: absolute;
+	right: 0;
+	top: 0;
+	bottom: 0;
+	width: 5px;
+	cursor: col-resize;
+	user-select: none;
+	touch-action: none;
+	z-index: 1;
+	border-right: 2px solid transparent;
+	transition: border-color 0.15s ease;
+}
+
+.iwbe-resize-handle:hover,
+.iwbe-resize-handle--active {
+	border-right-color: #2271b1;
+}
+
+.iwbe-th--resizing {
+	opacity: 0.85;
+}
+
+/* Prevent text selection while resizing anywhere in the grid */
+.iwbe-grid-scroll-container:has( .iwbe-resize-handle--active ) {
+	user-select: none;
+	cursor: col-resize;
+}
+
+/* ── Column drag reorder ────────────────────────────────── */
+
+.iwbe-th[ draggable='true' ] {
+	cursor: grab;
+}
+
+.iwbe-th[ draggable='true' ]:active {
+	cursor: grabbing;
+}
+
+.iwbe-th--dragging {
+	opacity: 0.4;
+}
+
+.iwbe-th--drag-over {
+	box-shadow: inset 2px 0 0 #2271b1;
+}
+
 /* ── Header column menu ─────────────────────────────────── */
 
 .iwbe-th-menu-wrap {
@@ -567,6 +616,14 @@
 .iwbe-grid-body-wrapper {
 	border-top: 1px solid #c3c4c7;
 	background: #fff;
+}
+
+/* Prevent react-window List from creating a second horizontal scrollbar.
+   When overflowY is set on a flex/block element, CSS implicitly promotes
+   overflow-x to auto as well, producing a duplicate scrollbar. Horizontal
+   scrolling is handled exclusively by .iwbe-grid-scroll-container. */
+.iwbe-grid-body-wrapper > div[style] {
+	overflow-x: hidden !important;
 }
 
 .iwbe-td {
