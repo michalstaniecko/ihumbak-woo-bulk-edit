@@ -142,7 +142,7 @@ jobs:
             --exclude='scripts' \
             --exclude='stubs' \
             --exclude='docs' \
-            --exclude='build' \
+            --exclude='/build' \
             --exclude='dist' \
             --exclude='node_modules' \
             --exclude='.github' \
