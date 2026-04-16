@@ -13,7 +13,6 @@ export function App(): JSX.Element {
 	return (
 		<div className="iwbe-app">
 			<div className="iwbe-app-header">
-				<h1>{ __( 'Bulk Edit Products', 'ihumbak-woo-bulk-edit' ) }</h1>
 				<button
 					type="button"
 					className="button iwbe-history-toggle"

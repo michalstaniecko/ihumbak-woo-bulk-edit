@@ -944,13 +944,8 @@
 .iwbe-app-header {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
-	gap: 16px;
-	margin-bottom: 16px;
-}
-
-.iwbe-app-header h1 {
-	margin: 0;
+	justify-content: flex-end;
+	margin-bottom: 12px;
 }
 
 .iwbe-history-toggle {
