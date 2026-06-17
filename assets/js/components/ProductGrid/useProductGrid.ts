@@ -18,7 +18,7 @@ import { useFields } from '@/hooks/useFields';
 import { useVariations } from '@/hooks/useVariations';
 import { createColumns } from './columnFactory';
 import type { GridPaginationState } from '@/types/grid';
-import type { Field, Product, ProductFilter, Sort, VariationsResponse, SavedFilterDefinition, FilterGroup, FilterCondition } from '@/types/api';
+import type { Field, Product, ProductFilter, Sort, VariationsResponse, SavedFilterDefinition, FilterGroup } from '@/types/api';
 // VariationsResponse is used by the variationsMap type in the return shape.
 import { useExpansionStore, useFiltersStore, useColumnVisibilityStore, useColumnLayoutStore } from '@/store';
 import { selectLegacyFilters } from '@/store/useFiltersStore';
@@ -159,11 +159,25 @@ export function useProductGrid(): UseProductGridReturn {
 
 		if ( ! hasSearch ) return root;
 
-		const searchCondition: FilterCondition = {
-			type: 'condition',
-			field: 'name',
-			operator: 'LIKE',
-			value: debouncedSearch.trim(),
+		// Match the term against name OR SKU (both with LIKE %term%).
+		const term = debouncedSearch.trim();
+		const searchCondition: FilterGroup = {
+			type: 'group',
+			combinator: 'OR',
+			children: [
+				{
+					type: 'condition',
+					field: 'name',
+					operator: 'LIKE',
+					value: term,
+				},
+				{
+					type: 'condition',
+					field: 'sku',
+					operator: 'LIKE',
+					value: term,
+				},
+			],
 		};
 
 		if ( ! hasFilters ) {
